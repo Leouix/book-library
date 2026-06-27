@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -47,6 +48,7 @@ type createBookRequest struct {
 func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
 	var req createBookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("JSON decode error: %v", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
@@ -57,7 +59,8 @@ func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
 		Year:   req.Year,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create book"})
+		log.Printf("DB error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
 

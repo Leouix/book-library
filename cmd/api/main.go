@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 
 	"book-library/internal/api"
 	"book-library/internal/storage"
@@ -18,6 +19,10 @@ import (
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("[api] ")
+
+	if err := godotenv.Load(); err != nil {
+		log.Println("warning: .env file not found, using environment variables")
+	}
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {

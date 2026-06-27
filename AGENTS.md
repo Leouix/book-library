@@ -19,6 +19,7 @@
 | HTTP-роутинг | **net/http** (Go 1.22+) | Роутинг без сторонних библиотек |
 | Логирование | **log/slog** | Структурированное логирование (stdout, уровень Debug) |
 | Live-reload | **air** | Автопересборка при изменениях (`.air.toml`) |
+| Конфигурация | **godotenv** | Загрузка переменных из `.env`-файла |
 | Линтинг | **golangci-lint** | Статический анализ кода |
 
 ---
@@ -61,6 +62,7 @@ sqlc.yaml                # Конфигурация sqlc
 docker-compose.yml       # PostgreSQL 16
 Dockerfile               # Multi-stage production-образ
 .air.toml                # Конфигурация live-reload
+.env                     # Переменные окружения (не коммитится!)
 ```
 
 ---

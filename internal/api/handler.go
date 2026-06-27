@@ -22,17 +22,22 @@ type BookStore interface {
 
 // Handler holds the dependencies for HTTP handlers.
 type Handler struct {
-	store BookStore
+	store     BookStore
+	userStore UserStore
+	jwtSecret []byte
 }
 
-// NewHandler creates a new Handler with the given store.
-func NewHandler(store BookStore) *Handler {
-	return &Handler{store: store}
+// NewHandler creates a new Handler with the given store, userStore and JWT secret.
+func NewHandler(store BookStore, userStore UserStore, jwtSecret []byte) *Handler {
+	return &Handler{store: store, userStore: userStore, jwtSecret: jwtSecret}
 }
 
-// RegisterRoutes registers all book routes on the given mux.
+// RegisterRoutes registers all routes on the given mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /books", h.CreateBook)
+	mux.HandleFunc("POST /register", h.Register)
+	mux.HandleFunc("POST /login", h.Login)
+
+	mux.Handle("POST /books", h.AuthMiddleware(http.HandlerFunc(h.CreateBook)))
 	mux.HandleFunc("GET /books/{id}", h.GetBook)
 	mux.HandleFunc("GET /books", h.ListBooks)
 	mux.HandleFunc("PUT /books/{id}", h.UpdateBook)

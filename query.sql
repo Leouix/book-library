@@ -22,3 +22,13 @@ RETURNING id, title, author, year;
 -- name: DeleteBook :exec
 DELETE FROM books
 WHERE id = $1;
+
+-- name: CreateUser :one
+INSERT INTO users (username, password_hash)
+VALUES ($1, $2)
+RETURNING id, username, password_hash;
+
+-- name: GetUserByUsername :one
+SELECT id, username, password_hash
+FROM users
+WHERE username = $1;

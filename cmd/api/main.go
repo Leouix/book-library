@@ -29,6 +29,11 @@ func main() {
 		addr = ":8080"
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "changeme"
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -44,7 +49,7 @@ func main() {
 	log.Println("connected to database")
 
 	queries := storage.New(pool)
-	handler := api.NewHandler(queries)
+	handler := api.NewHandler(queries, queries, []byte(jwtSecret))
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)

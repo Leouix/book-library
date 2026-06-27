@@ -113,8 +113,8 @@ Dockerfile               # Multi-stage production-образ
 | `POST` | `/books` | Bearer | Создать книгу + загрузить .txt-файл (multipart: title*, author*, year*, file*) |
 | `GET` | `/books` | — | Список всех книг (с file_url) |
 | `GET` | `/books/{id}` | — | Получить книгу по ID (с file_url) |
-| `PUT` | `/books/{id}` | — | Обновить метаданные книги |
-| `DELETE` | `/books/{id}` | — | Удалить книгу |
+| `PUT` | `/books/{id}` | Bearer | Обновить метаданные книги |
+| `DELETE` | `/books/{id}` | Bearer | Удалить книгу |
 
 ### sqlc: когда перегенерировать
 - Изменился `schema.sql` (таблицы/колонки)

@@ -43,8 +43,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.With(h.AuthMiddleware).Post("/books", h.CreateBook)
 	r.Get("/books", h.ListBooks)
 	r.Get("/books/{id}", h.GetBook)
-	r.Put("/books/{id}", h.UpdateBook)
-	r.Delete("/books/{id}", h.DeleteBook)
+	r.With(h.AuthMiddleware).Put("/books/{id}", h.UpdateBook)
+	r.With(h.AuthMiddleware).Delete("/books/{id}", h.DeleteBook)
 }
 
 func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"book-library/internal/api"
+	"book-library/internal/logger"
 	"book-library/internal/storage"
 )
 
@@ -35,11 +35,8 @@ func runMigrations(databaseURL string) error {
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
-	log.SetPrefix("[api] ")
-
 	if err := godotenv.Load(); err != nil {
-		log.Println("warning: .env file not found, using environment variables")
+		logger.Warn(".env file not found, using environment variables")
 	}
 
 	dsn := os.Getenv("DATABASE_URL")
@@ -62,17 +59,17 @@ func main() {
 
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		logger.Fatal("failed to connect to database", err)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(ctx); err != nil {
-		log.Fatalf("failed to ping database: %v", err)
+		logger.Fatal("failed to ping database", err)
 	}
-	log.Println("connected to database")
+	logger.Info("connected to database")
 
 	if err := runMigrations(dsn); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		logger.Fatal("failed to run migrations", err)
 	}
 
 	queries := storage.New(pool)
@@ -87,9 +84,9 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("server listening on %s", addr)
+		logger.Info("server listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			logger.Fatal("server error", err)
 		}
 	}()
 
@@ -97,14 +94,14 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("shutting down server...")
+	logger.Info("shutting down server...")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("server forced to shutdown: %v", err)
+		logger.Fatal("server forced to shutdown", err)
 	}
 
-	log.Println("server stopped")
+	logger.Info("server stopped")
 }

@@ -3,14 +3,16 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"book-library/internal/logger"
 	"book-library/internal/storage"
 )
 
@@ -100,7 +102,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Printf("bcrypt error: %v", err)
+		logger.Error("register: bcrypt error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
@@ -110,7 +112,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		PasswordHash: string(hash),
 	})
 	if err != nil {
-		log.Printf("CreateUser error: %v", err)
+		logger.Error("register: failed to create user", err, "username", req.Username)
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "username already exists"})
 		return
 	}
@@ -133,6 +135,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.userStore.GetUserByUsername(r.Context(), req.Username)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Debug("login: user not found", "username", req.Username)
+		} else {
+			logger.Error("login: failed to query user", err, "username", req.Username)
+		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid username or password"})
 		return
 	}
@@ -154,7 +161,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	signed, err := token.SignedString(h.jwtSecret)
 	if err != nil {
-		log.Printf("JWT sign error: %v", err)
+		logger.Error("login: jwt sign error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}

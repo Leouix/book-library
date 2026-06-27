@@ -3,10 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"errors"
 	"net/http"
 	"strconv"
 
+	"github.com/jackc/pgx/v5"
+
+	"book-library/internal/logger"
 	"book-library/internal/storage"
 )
 
@@ -53,7 +56,7 @@ type createBookRequest struct {
 func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
 	var req createBookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("JSON decode error: %v", err)
+		logger.Debug("create book: invalid JSON", "error", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
@@ -64,7 +67,7 @@ func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
 		Year:   req.Year,
 	})
 	if err != nil {
-		log.Printf("DB error: %v", err)
+		logger.Error("create book: db error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
@@ -81,6 +84,11 @@ func (h *Handler) GetBook(w http.ResponseWriter, r *http.Request) {
 
 	book, err := h.store.GetBook(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Debug("get book: not found", "id", id)
+		} else {
+			logger.Error("get book: db error", err, "id", id)
+		}
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "book not found"})
 		return
 	}
@@ -128,6 +136,11 @@ func (h *Handler) UpdateBook(w http.ResponseWriter, r *http.Request) {
 		Year:   req.Year,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Debug("update book: not found", "id", id)
+		} else {
+			logger.Error("update book: db error", err, "id", id)
+		}
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "book not found"})
 		return
 	}
@@ -143,6 +156,11 @@ func (h *Handler) DeleteBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.DeleteBook(r.Context(), id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Debug("delete book: not found", "id", id)
+		} else {
+			logger.Error("delete book: db error", err, "id", id)
+		}
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "book not found"})
 		return
 	}

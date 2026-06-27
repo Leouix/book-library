@@ -7,6 +7,8 @@ package storage
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createBook = `-- name: CreateBook :one
@@ -29,6 +31,38 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, e
 		&i.Title,
 		&i.Author,
 		&i.Year,
+	)
+	return i, err
+}
+
+const createFile = `-- name: CreateFile :one
+INSERT INTO files (original_name, s3_key, mime_type, size)
+VALUES ($1, $2, $3, $4)
+RETURNING id, original_name, s3_key, mime_type, size, created_at
+`
+
+type CreateFileParams struct {
+	OriginalName string
+	S3Key        string
+	MimeType     string
+	Size         int64
+}
+
+func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (File, error) {
+	row := q.db.QueryRow(ctx, createFile,
+		arg.OriginalName,
+		arg.S3Key,
+		arg.MimeType,
+		arg.Size,
+	)
+	var i File
+	err := row.Scan(
+		&i.ID,
+		&i.OriginalName,
+		&i.S3Key,
+		&i.MimeType,
+		&i.Size,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -75,6 +109,26 @@ func (q *Queries) GetBook(ctx context.Context, id int32) (Book, error) {
 		&i.Title,
 		&i.Author,
 		&i.Year,
+	)
+	return i, err
+}
+
+const getFile = `-- name: GetFile :one
+SELECT id, original_name, s3_key, mime_type, size, created_at
+FROM files
+WHERE id = $1
+`
+
+func (q *Queries) GetFile(ctx context.Context, id pgtype.UUID) (File, error) {
+	row := q.db.QueryRow(ctx, getFile, id)
+	var i File
+	err := row.Scan(
+		&i.ID,
+		&i.OriginalName,
+		&i.S3Key,
+		&i.MimeType,
+		&i.Size,
+		&i.CreatedAt,
 	)
 	return i, err
 }

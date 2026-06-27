@@ -46,7 +46,7 @@ func TestListBooks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mock, &mockUserStore{}, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
 			req := httptest.NewRequest(http.MethodGet, "/books", nil)
 			rec := httptest.NewRecorder()
 
@@ -72,7 +72,7 @@ func TestListBooks_dbError(t *testing.T) {
 		listBooksFn: func(_ context.Context) ([]storage.Book, error) {
 			return nil, pgx.ErrNoRows
 		},
-	}, &mockUserStore{}, []byte("secret"))
+	}, &mockUserStore{}, nil, []byte("secret"))
 	req := httptest.NewRequest(http.MethodGet, "/books", nil)
 	rec := httptest.NewRecorder()
 
@@ -130,7 +130,7 @@ func TestGetBook(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mock, &mockUserStore{}, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
 			req := chiCtx(httptest.NewRequest(http.MethodGet, "/books/"+tt.id, nil), "id", tt.id)
 			rec := httptest.NewRecorder()
 
@@ -195,7 +195,7 @@ func TestCreateBook(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			h := NewHandler(tt.mock, &mockUserStore{}, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
 			req := httptest.NewRequest(http.MethodPost, "/books", &buf)
 			rec := httptest.NewRecorder()
 
@@ -263,7 +263,7 @@ func TestUpdateBook(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			h := NewHandler(tt.mock, &mockUserStore{}, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
 			req := chiCtx(httptest.NewRequest(http.MethodPut, "/books/"+tt.id, &buf), "id", tt.id)
 			rec := httptest.NewRecorder()
 
@@ -315,7 +315,7 @@ func TestDeleteBook(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mock, &mockUserStore{}, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
 			req := chiCtx(httptest.NewRequest(http.MethodDelete, "/books/"+tt.id, nil), "id", tt.id)
 			rec := httptest.NewRecorder()
 

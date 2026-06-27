@@ -4,11 +4,24 @@
 
 package storage
 
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
 type Book struct {
 	ID     int32
 	Title  string
 	Author string
 	Year   int32
+}
+
+type File struct {
+	ID           pgtype.UUID
+	OriginalName string
+	S3Key        string
+	MimeType     string
+	Size         int64
+	CreatedAt    pgtype.Timestamptz
 }
 
 type User struct {

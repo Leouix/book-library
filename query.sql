@@ -32,3 +32,13 @@ RETURNING id, username, password_hash;
 SELECT id, username, password_hash
 FROM users
 WHERE username = $1;
+
+-- name: CreateFile :one
+INSERT INTO files (original_name, s3_key, mime_type, size)
+VALUES ($1, $2, $3, $4)
+RETURNING id, original_name, s3_key, mime_type, size, created_at;
+
+-- name: GetFile :one
+SELECT id, original_name, s3_key, mime_type, size, created_at
+FROM files
+WHERE id = $1;

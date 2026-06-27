@@ -19,7 +19,9 @@ import (
 
 	"book-library/internal/api"
 	"book-library/internal/logger"
+	"book-library/internal/service"
 	"book-library/internal/storage"
+	s3storage "book-library/internal/storage/s3"
 )
 
 func runMigrations(databaseURL string) error {
@@ -75,7 +77,27 @@ func main() {
 	}
 
 	queries := storage.New(pool)
-	handler := api.NewHandler(queries, queries, []byte(jwtSecret))
+
+	b2KeyID := os.Getenv("B2_KEY_ID")
+	b2AppKey := os.Getenv("B2_APPLICATION_KEY")
+	b2Region := os.Getenv("B2_REGION")
+	b2Endpoint := os.Getenv("B2_ENDPOINT")
+	b2Bucket := os.Getenv("B2_BUCKET")
+
+	var fileSvc *service.FileService
+	if b2KeyID != "" && b2AppKey != "" && b2Endpoint != "" && b2Bucket != "" {
+		s3Client, err := s3storage.NewClient(ctx, b2KeyID, b2AppKey, b2Region, b2Endpoint)
+		if err != nil {
+			logger.Fatal("failed to create S3 client", err)
+		}
+		fileStorage := s3storage.NewStorage(s3Client, b2Bucket)
+		fileSvc = service.NewFileService(fileStorage, queries)
+		logger.Info("S3 file storage initialized")
+	} else {
+		logger.Warn("B2 credentials not set, file upload/download disabled")
+	}
+
+	handler := api.NewHandler(queries, queries, fileSvc, []byte(jwtSecret))
 
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)

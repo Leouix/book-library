@@ -17,7 +17,9 @@
 | Миграции БД | **golang-migrate v4** | Версионирование схемы БД (автозапуск при старте)
 | Аутентификация | **golang-jwt/v5** | JWT-токены (HS256, 24h TTL) |
 | Хеширование паролей | **bcrypt** (`x/crypto`) | Хеширование и проверка паролей |
-| HTTP-роутинг | **net/http** (Go 1.22+) | Роутинг без сторонних библиотек |
+| HTTP-роутинг | **chi/v5** | Роутинг на основе chi |
+| S3-клиент | **aws-sdk-go-v2** | Backblaze B2 через S3 API |
+| UUID | **google/uuid** | Генерация UUID для s3_key |
 | Логирование | **log/slog** | Структурированное логирование (stdout, уровень Debug) |
 | Live-reload | **air** | Автопересборка при изменениях (`.air.toml`) |
 | Конфигурация | **godotenv** | Загрузка переменных из `.env`-файла |
@@ -55,14 +57,18 @@ internal/
   api/
     handler.go           # CRUD-хэндлеры книг
     auth.go              # Регистрация, логин, JWT middleware
+    files.go             # Загрузка/скачивание файлов
+  service/
+    file.go              # Бизнес-логика файлов (S3 + БД)
   storage/
     db.go                # DBTX-интерфейс, Queries (сгенерирован sqlc)
     models.go            # Go-структуры таблиц (сгенерирован sqlc)
-    query.sql.go         # Методы запросов к книгам (сгенерирован sqlc)
+    query.sql.go         # Методы запросов к книгам/файлам (сгенерирован sqlc)
+    s3/
+      s3.go              # S3-клиент, FileStorage интерфейс, S3Storage
   logger/logger.go       # Глобальный slog.Logger
-schema.sql               # DDL (таблицы books, users)
 query.sql                # Аннотированные SQL-запросы для sqlc
-migrations/              # Миграции golang-migrate (000001_init.up.sql, .down.sql)
+migrations/              # Миграции golang-migrate
 sqlc.yaml                # Конфигурация sqlc
 docker-compose.yml       # PostgreSQL 16
 Dockerfile               # Multi-stage production-образ
@@ -79,6 +85,11 @@ Dockerfile               # Multi-stage production-образ
 | `DATABASE_URL` | `postgres://bookuser:bookpass@localhost:5432/bookdb` | Строка подключения к БД |
 | `ADDR` | `:8080` | Адрес HTTP-сервера |
 | `JWT_SECRET` | `changeme` | Секрет для подписи JWT |
+| `B2_KEY_ID` | — | Backblaze B2 Application Key ID |
+| `B2_APPLICATION_KEY` | — | Backblaze B2 Application Key |
+| `B2_REGION` | — | Регион B2 (например `us-west-002`) |
+| `B2_ENDPOINT` | — | S3-совместимый endpoint B2 |
+| `B2_BUCKET` | — | Имя корзины B2 |
 
 ---
 
@@ -87,6 +98,7 @@ Dockerfile               # Multi-stage production-образ
 ### Dependency Injection
 Никаких глобальных переменных для БД. Подключение передаётся через структуры:
 - `pgxpool.Pool` → `storage.Queries` → `api.Handler`
+- `s3.Client` → `s3.S3Storage` → `service.FileService` → `api.Handler`
 
 ### Обработка ошибок
 Ошибки проверяются явно (`if err != nil`), клиенту возвращаются осмысленные HTTP-статусы (400, 401, 404, 409, 500). Паниковать нельзя.
@@ -102,6 +114,8 @@ Dockerfile               # Multi-stage production-образ
 | `GET` | `/books/{id}` | — | Получить книгу по ID |
 | `PUT` | `/books/{id}` | — | Обновить книгу |
 | `DELETE` | `/books/{id}` | — | Удалить книгу |
+| `POST` | `/api/files` | Bearer | Загрузить .txt-файл (multipart) |
+| `GET` | `/api/files/{id}` | — | Скачать файл по ID (stream из B2) |
 
 ### sqlc: когда перегенерировать
 - Изменился `schema.sql` (таблицы/колонки)
@@ -116,6 +130,20 @@ sqlc generate          # или: go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
 ### Сгенерированные файлы (в .git)
 `internal/storage/db.go`, `models.go`, `query.sql.go` — несмотря на авто-генерацию, лежат в репозитории, чтобы проект компилировался без запуска sqlc.
+
+### File Storage (S3 / Backblaze B2)
+
+Пакет `internal/storage/s3` предоставляет:
+- `s3.FileStorage` — интерфейс с методами `Upload` / `Download`
+- `s3.S3Storage` — имплементация через aws-sdk-go-v2 (`PutObject` / `GetObject`)
+- `s3.NewClient` — инициализация S3-клиента с `BaseEndpoint` и `UsePathStyle = true`
+
+Пакет `internal/service` реализует:
+- Генерацию `s3_key` на базе `google/uuid`
+- Координацию S3 + БД в `FileService.UploadFile` / `DownloadFile`
+- `File.ID` — `pgtype.UUID` (маппинг sqlc + pgx)
+
+Если B2 не настроен (переменные пусты), сервер запускается без файлового хранилища — ручки `/api/files` возвращают 503.
 
 ### Миграции (golang-migrate v4)
 
@@ -142,7 +170,7 @@ go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
   -path migrations -database "postgres://bookuser:bookpass@localhost:5432/bookdb?sslmode=disable" down 1
 ```
 
-**Важно:** после изменения схемы БД через миграцию необходимо обновить `schema.sql` (для sqlc-генерации типов) и перезапустить `sqlc generate`. Каждая новая миграция — это инкрементальное изменение; весь код миграций должен быть идемпотентным насколько возможно (используйте `IF EXISTS`, `IF NOT EXISTS`).
+**Важно:** после изменения схемы БД через миграцию необходимо перезапустить `sqlc generate` (схема читается из `migrations/`). Каждая новая миграция — это инкрементальное изменение; весь код миграций должен быть идемпотентным насколько возможно (используйте `IF EXISTS`, `IF NOT EXISTS`).
 
 Никогда не радактируй файл .env
 Дописывай важные изменения в AGENTS.md 

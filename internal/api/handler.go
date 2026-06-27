@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"book-library/internal/logger"
+	"book-library/internal/service"
 	"book-library/internal/storage"
 )
 
@@ -28,12 +29,13 @@ type BookStore interface {
 type Handler struct {
 	store     BookStore
 	userStore UserStore
+	fileSvc   *service.FileService
 	jwtSecret []byte
 }
 
-// NewHandler creates a new Handler with the given store, userStore and JWT secret.
-func NewHandler(store BookStore, userStore UserStore, jwtSecret []byte) *Handler {
-	return &Handler{store: store, userStore: userStore, jwtSecret: jwtSecret}
+// NewHandler creates a new Handler with the given store, userStore, file service and JWT secret.
+func NewHandler(store BookStore, userStore UserStore, fileSvc *service.FileService, jwtSecret []byte) *Handler {
+	return &Handler{store: store, userStore: userStore, fileSvc: fileSvc, jwtSecret: jwtSecret}
 }
 
 // RegisterRoutes registers all routes on the given chi router.
@@ -46,6 +48,9 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/books/{id}", h.GetBook)
 	r.Put("/books/{id}", h.UpdateBook)
 	r.Delete("/books/{id}", h.DeleteBook)
+
+	r.With(h.AuthMiddleware).Post("/api/files", h.UploadFile)
+	r.Get("/api/files/{id}", h.DownloadFile)
 }
 
 type createBookRequest struct {

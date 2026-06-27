@@ -24,7 +24,12 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxFileSize)
 
 	if err := r.ParseMultipartForm(maxFileSize); err != nil {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "file too large: max 10 MB"})
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "file too large: max 10 MB"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart form"})
 		return
 	}
 

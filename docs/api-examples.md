@@ -265,3 +265,70 @@ curl -X DELETE http://localhost:8080/books/1
 |--------|------------------|
 | 400    | Невалидный id    |
 | 404    | Книга не найдена |
+
+---
+
+## Файлы
+
+| Метод | Путь               | Описание                | Защита    |
+|-------|--------------------|------------------------|-----------|
+| POST  | `/api/files`       | Загрузить .txt-файл    | Bearer    |
+| GET   | `/api/files/{id}`  | Скачать файл           | —         |
+
+> 🔐 `POST /api/files` требует JWT-токен в заголовке `Authorization: Bearer <token>`.
+
+### Загрузить файл
+
+```
+POST http://localhost:8080/api/files
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+Body (form-data):
+  file: <file>    (поле "file", .txt, макс 10 MB)
+```
+
+> ❗ Не указывай `Content-Type` руками — curl/Bruno проставят его с правильным boundary.
+> Правильный curl (без `--header 'content-type: ...'`):
+> ```bash
+> curl -X POST http://localhost:8080/api/files \
+>   -H "Authorization: Bearer <token>" \
+>   -F "file=@/home/leouix/book.txt"
+> ```
+
+**Ответ `201 Created`:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Ошибки:**
+
+| Статус | Когда                           |
+|--------|----------------------------------|
+| 400    | Невалидный multipart или нет поля `file` |
+| 401    | Отсутствует или невалидный токен |
+| 413    | Файл больше 10 MB                |
+
+### Скачать файл
+
+```
+GET http://localhost:8080/api/files/{id}
+```
+
+**Параметры пути:**
+
+| Параметр | Тип    | Описание  |
+|----------|--------|-----------|
+| id       | UUID   | ID файла  |
+
+**Ответ:** тело файла с `Content-Type: text/plain` и `Content-Disposition: inline; filename="<original_name>"`
+
+**Ошибки:**
+
+| Статус | Когда              |
+|--------|---------------------|
+| 400    | Невалидный UUID     |
+| 404    | Файл не найден      |

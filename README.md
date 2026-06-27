@@ -1,6 +1,6 @@
 # Book Library API
 
-Базовый URL: `http://localhost:8080`
+Технические особенности проекта находятся в AGENTS.md
 
 ## Эндпоинты
 

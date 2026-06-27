@@ -1,15 +1,15 @@
 -- name: CreateBook :one
-INSERT INTO books (title, author, year)
-VALUES ($1, $2, $3)
-RETURNING id, title, author, year;
+INSERT INTO books (title, author, year, file_url, s3_key, file_name)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, title, author, year, file_url, s3_key, file_name;
 
 -- name: GetBook :one
-SELECT id, title, author, year
+SELECT id, title, author, year, file_url, s3_key, file_name
 FROM books
 WHERE id = $1;
 
 -- name: ListBooks :many
-SELECT id, title, author, year
+SELECT id, title, author, year, file_url, s3_key, file_name
 FROM books
 ORDER BY id;
 
@@ -17,7 +17,7 @@ ORDER BY id;
 UPDATE books
 SET title = $2, author = $3, year = $4
 WHERE id = $1
-RETURNING id, title, author, year;
+RETURNING id, title, author, year, file_url, s3_key, file_name;
 
 -- name: DeleteBook :exec
 DELETE FROM books
@@ -32,13 +32,3 @@ RETURNING id, username, password_hash;
 SELECT id, username, password_hash
 FROM users
 WHERE username = $1;
-
--- name: CreateFile :one
-INSERT INTO files (original_name, s3_key, mime_type, size)
-VALUES ($1, $2, $3, $4)
-RETURNING id, original_name, s3_key, mime_type, size, created_at;
-
--- name: GetFile :one
-SELECT id, original_name, s3_key, mime_type, size, created_at
-FROM files
-WHERE id = $1;

@@ -7,62 +7,41 @@ package storage
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createBook = `-- name: CreateBook :one
-INSERT INTO books (title, author, year)
-VALUES ($1, $2, $3)
-RETURNING id, title, author, year
+INSERT INTO books (title, author, year, file_url, s3_key, file_name)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, title, author, year, file_url, s3_key, file_name
 `
 
 type CreateBookParams struct {
-	Title  string
-	Author string
-	Year   int32
+	Title    string
+	Author   string
+	Year     int32
+	FileUrl  string
+	S3Key    string
+	FileName string
 }
 
 func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, error) {
-	row := q.db.QueryRow(ctx, createBook, arg.Title, arg.Author, arg.Year)
+	row := q.db.QueryRow(ctx, createBook,
+		arg.Title,
+		arg.Author,
+		arg.Year,
+		arg.FileUrl,
+		arg.S3Key,
+		arg.FileName,
+	)
 	var i Book
 	err := row.Scan(
 		&i.ID,
 		&i.Title,
 		&i.Author,
 		&i.Year,
-	)
-	return i, err
-}
-
-const createFile = `-- name: CreateFile :one
-INSERT INTO files (original_name, s3_key, mime_type, size)
-VALUES ($1, $2, $3, $4)
-RETURNING id, original_name, s3_key, mime_type, size, created_at
-`
-
-type CreateFileParams struct {
-	OriginalName string
-	S3Key        string
-	MimeType     string
-	Size         int64
-}
-
-func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (File, error) {
-	row := q.db.QueryRow(ctx, createFile,
-		arg.OriginalName,
-		arg.S3Key,
-		arg.MimeType,
-		arg.Size,
-	)
-	var i File
-	err := row.Scan(
-		&i.ID,
-		&i.OriginalName,
+		&i.FileUrl,
 		&i.S3Key,
-		&i.MimeType,
-		&i.Size,
-		&i.CreatedAt,
+		&i.FileName,
 	)
 	return i, err
 }
@@ -96,7 +75,7 @@ func (q *Queries) DeleteBook(ctx context.Context, id int32) error {
 }
 
 const getBook = `-- name: GetBook :one
-SELECT id, title, author, year
+SELECT id, title, author, year, file_url, s3_key, file_name
 FROM books
 WHERE id = $1
 `
@@ -109,26 +88,9 @@ func (q *Queries) GetBook(ctx context.Context, id int32) (Book, error) {
 		&i.Title,
 		&i.Author,
 		&i.Year,
-	)
-	return i, err
-}
-
-const getFile = `-- name: GetFile :one
-SELECT id, original_name, s3_key, mime_type, size, created_at
-FROM files
-WHERE id = $1
-`
-
-func (q *Queries) GetFile(ctx context.Context, id pgtype.UUID) (File, error) {
-	row := q.db.QueryRow(ctx, getFile, id)
-	var i File
-	err := row.Scan(
-		&i.ID,
-		&i.OriginalName,
+		&i.FileUrl,
 		&i.S3Key,
-		&i.MimeType,
-		&i.Size,
-		&i.CreatedAt,
+		&i.FileName,
 	)
 	return i, err
 }
@@ -147,7 +109,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listBooks = `-- name: ListBooks :many
-SELECT id, title, author, year
+SELECT id, title, author, year, file_url, s3_key, file_name
 FROM books
 ORDER BY id
 `
@@ -166,6 +128,9 @@ func (q *Queries) ListBooks(ctx context.Context) ([]Book, error) {
 			&i.Title,
 			&i.Author,
 			&i.Year,
+			&i.FileUrl,
+			&i.S3Key,
+			&i.FileName,
 		); err != nil {
 			return nil, err
 		}
@@ -181,7 +146,7 @@ const updateBook = `-- name: UpdateBook :one
 UPDATE books
 SET title = $2, author = $3, year = $4
 WHERE id = $1
-RETURNING id, title, author, year
+RETURNING id, title, author, year, file_url, s3_key, file_name
 `
 
 type UpdateBookParams struct {
@@ -204,6 +169,9 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) (Book, e
 		&i.Title,
 		&i.Author,
 		&i.Year,
+		&i.FileUrl,
+		&i.S3Key,
+		&i.FileName,
 	)
 	return i, err
 }

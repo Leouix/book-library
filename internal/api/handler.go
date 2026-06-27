@@ -15,8 +15,8 @@ import (
 	"book-library/internal/storage"
 )
 
-// BookStore is the interface for book storage operations.
-// It is satisfied by the sqlc-generated *storage.Queries.
+const maxFileSize = 10 << 20 // 10 MB
+
 type BookStore interface {
 	CreateBook(ctx context.Context, arg storage.CreateBookParams) (storage.Book, error)
 	GetBook(ctx context.Context, id int32) (storage.Book, error)
@@ -25,7 +25,6 @@ type BookStore interface {
 	DeleteBook(ctx context.Context, id int32) error
 }
 
-// Handler holds the dependencies for HTTP handlers.
 type Handler struct {
 	store     BookStore
 	userStore UserStore
@@ -33,12 +32,10 @@ type Handler struct {
 	jwtSecret []byte
 }
 
-// NewHandler creates a new Handler with the given store, userStore, file service and JWT secret.
 func NewHandler(store BookStore, userStore UserStore, fileSvc *service.FileService, jwtSecret []byte) *Handler {
 	return &Handler{store: store, userStore: userStore, fileSvc: fileSvc, jwtSecret: jwtSecret}
 }
 
-// RegisterRoutes registers all routes on the given chi router.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/register", h.Register)
 	r.Post("/login", h.Login)
@@ -48,29 +45,67 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/books/{id}", h.GetBook)
 	r.Put("/books/{id}", h.UpdateBook)
 	r.Delete("/books/{id}", h.DeleteBook)
-
-	r.With(h.AuthMiddleware).Post("/api/files", h.UploadFile)
-	r.Get("/api/files/{id}", h.DownloadFile)
-}
-
-type createBookRequest struct {
-	Title  string `json:"title"`
-	Author string `json:"author"`
-	Year   int32  `json:"year"`
 }
 
 func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
-	var req createBookRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logger.Debug("create book: invalid JSON", "error", err)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	if h.fileSvc == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "file storage not configured"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxFileSize)
+
+	if err := r.ParseMultipartForm(maxFileSize); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "file too large: max 10 MB"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart form"})
+		return
+	}
+
+	title := r.FormValue("title")
+	author := r.FormValue("author")
+	yearStr := r.FormValue("year")
+
+	if title == "" || author == "" || yearStr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "title, author and year are required"})
+		return
+	}
+
+	year, err := strconv.ParseInt(yearStr, 10, 32)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "year must be a valid integer"})
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing file field"})
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "text/plain"
+	}
+
+	s3Key, fileURL, err := h.fileSvc.UploadBookFile(r.Context(), header.Filename, file, contentType)
+	if err != nil {
+		logger.Error("create book: upload file", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to upload file"})
 		return
 	}
 
 	book, err := h.store.CreateBook(r.Context(), storage.CreateBookParams{
-		Title:  req.Title,
-		Author: req.Author,
-		Year:   req.Year,
+		Title:    title,
+		Author:   author,
+		Year:     int32(year),
+		FileUrl:  fileURL,
+		S3Key:    s3Key,
+		FileName: header.Filename,
 	})
 	if err != nil {
 		logger.Error("create book: db error", err)
@@ -116,12 +151,6 @@ func (h *Handler) ListBooks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, books)
 }
 
-type updateBookRequest struct {
-	Title  string `json:"title"`
-	Author string `json:"author"`
-	Year   int32  `json:"year"`
-}
-
 func (h *Handler) UpdateBook(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
@@ -129,7 +158,11 @@ func (h *Handler) UpdateBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req updateBookRequest
+	var req struct {
+		Title  string `json:"title"`
+		Author string `json:"author"`
+		Year   int32  `json:"year"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return

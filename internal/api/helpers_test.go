@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"testing"
 	"time"
@@ -11,7 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 
+	"book-library/internal/service"
 	"book-library/internal/storage"
+	"book-library/internal/storage/s3"
 )
 
 type mockBookStore struct {
@@ -106,6 +110,48 @@ func makeToken(t testing.TB, secret []byte, username string) string {
 		t.Fatalf("makeToken: %v", err)
 	}
 	return s
+}
+
+type mockFileStorage struct {
+	s3.FileStorage
+	uploadFn func(ctx context.Context, key string, reader io.Reader, contentType string) error
+}
+
+func (m *mockFileStorage) Upload(ctx context.Context, key string, reader io.Reader, contentType string) error {
+	return m.uploadFn(ctx, key, reader, contentType)
+}
+
+func fileSvcForTest() *service.FileService {
+	return service.NewFileService(&mockFileStorage{
+		uploadFn: func(_ context.Context, _ string, _ io.Reader, _ string) error {
+			return nil
+		},
+	}, "http://test")
+}
+
+func multipartBody(t testing.TB, fields map[string]string, filename, content string) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fw, err := w.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(fw, content); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return &buf, w.FormDataContentType()
 }
 
 type errResponse struct {

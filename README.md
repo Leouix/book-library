@@ -13,13 +13,13 @@
 
 ### Книги
 
-| Метод   | Путь           | Описание           | Защита    |
-|---------|----------------|--------------------|-----------|
-| POST    | `/books`       | Создать книгу      | Bearer    |
-| GET     | `/books/{id}`  | Получить книгу     | —         |
-| GET     | `/books`       | Список всех книг   | —         |
-| PUT     | `/books/{id}`  | Обновить книгу     | —         |
-| DELETE  | `/books/{id}`  | Удалить книгу      | —         |
+| Метод   | Путь           | Описание                       | Защита    |
+|---------|----------------|--------------------------------|-----------|
+| POST    | `/books`       | Создать книгу + загрузить файл | Bearer    |
+| GET     | `/books/{id}`  | Получить книгу                 | —         |
+| GET     | `/books`       | Список всех книг               | —         |
+| PUT     | `/books/{id}`  | Обновить метаданные книги      | —         |
+| DELETE  | `/books/{id}`  | Удалить книгу                  | —         |
 
 > 🔐 `POST /books` требует JWT-токен в заголовке `Authorization: Bearer <token>`. Остальные эндпоинты книг открыты.
 
@@ -103,9 +103,11 @@ curl -X POST http://localhost:8080/login \
 TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 curl -X POST http://localhost:8080/books \
-  -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"title": "Война и мир", "author": "Лев Толстой", "year": 1869}'
+  -F "title=Война и мир" \
+  -F "author=Лев Толстой" \
+  -F "year=1869" \
+  -F "file=@book.txt"
 ```
 
 **Заголовки:**
@@ -114,13 +116,14 @@ curl -X POST http://localhost:8080/books \
 |----------------|-----------------------|-------------|
 | Authorization  | `Bearer <JWT-токен>`  | да          |
 
-**Тело запроса:**
+**Поля формы (multipart/form-data):**
 
-| Поле    | Тип     | Обязательное | Описание          |
-|---------|---------|-------------|-------------------|
-| title   | string  | да          | Название книги    |
-| author  | string  | да          | Автор             |
-| year    | int     | да          | Год издания       |
+| Поле    | Тип     | Обязательное | Описание                 |
+|---------|---------|-------------|--------------------------|
+| title   | string  | да          | Название книги           |
+| author  | string  | да          | Автор                    |
+| year    | string  | да          | Год издания              |
+| file    | file    | да          | Файл (.txt, макс 10 MB)  |
 
 **Ответ `201 Created`:**
 
@@ -129,16 +132,21 @@ curl -X POST http://localhost:8080/books \
   "id": 1,
   "title": "Война и мир",
   "author": "Лев Толстой",
-  "year": 1869
+  "year": 1869,
+  "file_url": "http://localhost:8080/books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+  "s3_key": "books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+  "file_name": "book.txt"
 }
 ```
 
 **Ошибки:**
 
-| Статус | Когда                              |
-|--------|------------------------------------|
-| 400    | Невалидный JSON в теле             |
-| 401    | Отсутствует или невалидный токен   |
+| Статус | Когда                               |
+|--------|--------------------------------------|
+| 400    | Отсутствуют обязательные поля или файл |
+| 401    | Отсутствует или невалидный токен     |
+| 413    | Файл больше 10 MB                    |
+| 503    | Файловое хранилище не настроено      |
 
 ---
 
@@ -161,7 +169,10 @@ curl http://localhost:8080/books/1
   "id": 1,
   "title": "Война и мир",
   "author": "Лев Толстой",
-  "year": 1869
+  "year": 1869,
+  "file_url": "http://localhost:8080/books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+  "s3_key": "books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+  "file_name": "book.txt"
 }
 ```
 
@@ -188,13 +199,10 @@ curl http://localhost:8080/books
     "id": 1,
     "title": "Война и мир",
     "author": "Лев Толстой",
-    "year": 1869
-  },
-  {
-    "id": 2,
-    "title": "Преступление и наказание",
-    "author": "Фёдор Достоевский",
-    "year": 1866
+    "year": 1869,
+    "file_url": "http://localhost:8080/books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+    "s3_key": "books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+    "file_name": "book.txt"
   }
 ]
 ```
@@ -232,7 +240,10 @@ curl -X PUT http://localhost:8080/books/1 \
   "id": 1,
   "title": "Война и мир",
   "author": "Лев Толстой",
-  "year": 1873
+  "year": 1873,
+  "file_url": "http://localhost:8080/books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+  "s3_key": "books/550e8400-e29b-41d4-a716-446655440000/book.txt",
+  "file_name": "book.txt"
 }
 ```
 
@@ -265,68 +276,3 @@ curl -X DELETE http://localhost:8080/books/1
 |--------|------------------|
 | 400    | Невалидный id    |
 | 404    | Книга не найдена |
-
----
-
-## Файлы
-
-| Метод | Путь               | Описание                | Защита    |
-|-------|--------------------|------------------------|-----------|
-| POST  | `/api/files`       | Загрузить .txt-файл    | Bearer    |
-| GET   | `/api/files/{id}`  | Скачать файл           | —         |
-
-> 🔐 `POST /api/files` требует JWT-токен в заголовке `Authorization: Bearer <token>`.
-
-### Загрузить файл
-
-```
-POST http://localhost:8080/api/files
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-
-Body (form-data):
-  file: <file>    (поле "file", .txt, макс 10 MB)
-```
-
-> ```bash
-> curl -X POST http://localhost:8080/api/files \
->   -H "Authorization: Bearer <token>" \
->   -F "file=@/home/leouix/book.txt"
-> ```
-
-**Ответ `201 Created`:**
-
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-**Ошибки:**
-
-| Статус | Когда                           |
-|--------|----------------------------------|
-| 400    | Невалидный multipart или нет поля `file` |
-| 401    | Отсутствует или невалидный токен |
-| 413    | Файл больше 10 MB                |
-
-### Скачать файл
-
-```
-GET http://localhost:8080/api/files/{id}
-```
-
-**Параметры пути:**
-
-| Параметр | Тип    | Описание  |
-|----------|--------|-----------|
-| id       | UUID   | ID файла  |
-
-**Ответ:** тело файла с `Content-Type: text/plain` и `Content-Disposition: inline; filename="<original_name>"`
-
-**Ошибки:**
-
-| Статус | Когда              |
-|--------|---------------------|
-| 400    | Невалидный UUID     |
-| 404    | Файл не найден      |

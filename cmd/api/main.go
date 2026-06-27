@@ -84,6 +84,11 @@ func main() {
 	b2Endpoint := os.Getenv("B2_ENDPOINT")
 	b2Bucket := os.Getenv("B2_BUCKET")
 
+	fileBaseURL := os.Getenv("FILE_BASE_URL")
+	if fileBaseURL == "" {
+		fileBaseURL = "http://localhost:8080"
+	}
+
 	var fileSvc *service.FileService
 	if b2KeyID != "" && b2AppKey != "" && b2Endpoint != "" && b2Bucket != "" {
 		s3Client, err := s3storage.NewClient(ctx, b2KeyID, b2AppKey, b2Region, b2Endpoint)
@@ -91,7 +96,7 @@ func main() {
 			logger.Fatal("failed to create S3 client", err)
 		}
 		fileStorage := s3storage.NewStorage(s3Client, b2Bucket)
-		fileSvc = service.NewFileService(fileStorage, queries)
+		fileSvc = service.NewFileService(fileStorage, fileBaseURL)
 		logger.Info("S3 file storage initialized")
 	} else {
 		logger.Warn("B2 credentials not set, file upload/download disabled")

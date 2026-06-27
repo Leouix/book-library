@@ -36,7 +36,7 @@ func TestListBooks(t *testing.T) {
 			name: "with books",
 			mock: &mockBookStore{
 				listBooksFn: func(_ context.Context) ([]storage.Book, error) {
-					return []storage.Book{{ID: 1, Title: "T", Author: "A", Year: 2024}}, nil
+					return []storage.Book{{ID: 1, Title: "T", Author: "A", Year: 2024, FileUrl: "http://test/books/uuid/f.txt", S3Key: "books/uuid/f.txt", FileName: "f.txt"}}, nil
 				},
 			},
 			wantStatus: http.StatusOK,
@@ -156,29 +156,57 @@ func TestCreateBook(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		body       any
+		fields     map[string]string
+		filename   string
+		content    string
 		mock       *mockBookStore
 		wantStatus int
 	}{
 		{
-			name: "success",
-			body: map[string]any{"title": "T", "author": "A", "year": 2024},
+			name:     "success",
+			fields:   map[string]string{"title": "T", "author": "A", "year": "2024"},
+			filename: "book.txt",
+			content:  "hello world",
 			mock: &mockBookStore{
 				createBookFn: func(_ context.Context, arg storage.CreateBookParams) (storage.Book, error) {
-					return storage.Book{ID: 1, Title: arg.Title, Author: arg.Author, Year: arg.Year}, nil
+					return storage.Book{ID: 1, Title: arg.Title, Author: arg.Author, Year: arg.Year, FileUrl: arg.FileUrl, S3Key: arg.S3Key, FileName: arg.FileName}, nil
 				},
 			},
 			wantStatus: http.StatusCreated,
 		},
 		{
-			name:       "invalid JSON",
-			body:       "<<<>>>",
+			name:     "missing fields",
+			fields:   map[string]string{"title": ""},
+			filename: "book.txt",
+			content:  "hello",
+			mock: &mockBookStore{createBookFn: func(_ context.Context, _ storage.CreateBookParams) (storage.Book, error) {
+				panic("should not be called")
+			}},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:     "missing file",
+			fields:   map[string]string{"title": "T", "author": "A", "year": "2024"},
+			filename: "",
+			content:  "",
+			mock: &mockBookStore{createBookFn: func(_ context.Context, _ storage.CreateBookParams) (storage.Book, error) {
+				panic("should not be called")
+			}},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid year",
+			fields:     map[string]string{"title": "T", "author": "A", "year": "abc"},
+			filename:   "book.txt",
+			content:    "hello",
 			mock:       &mockBookStore{},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
-			name: "db error",
-			body: map[string]any{"title": "T", "author": "A", "year": 2024},
+			name:     "db error",
+			fields:   map[string]string{"title": "T", "author": "A", "year": "2024"},
+			filename: "book.txt",
+			content:  "hello",
 			mock: &mockBookStore{
 				createBookFn: func(_ context.Context, _ storage.CreateBookParams) (storage.Book, error) {
 					return storage.Book{}, pgx.ErrNoRows
@@ -190,15 +218,19 @@ func TestCreateBook(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			if err := json.NewEncoder(&buf).Encode(tt.body); err != nil {
-				t.Fatal(err)
+			h := NewHandler(tt.mock, &mockUserStore{}, fileSvcForTest(), []byte("secret"))
+
+			var req *http.Request
+			if tt.filename == "" && tt.content == "" {
+				req = httptest.NewRequest(http.MethodPost, "/books", bytes.NewReader([]byte("{}")))
+				req.Header.Set("Content-Type", "multipart/form-data")
+			} else {
+				buf, contentType := multipartBody(t, tt.fields, tt.filename, tt.content)
+				req = httptest.NewRequest(http.MethodPost, "/books", buf)
+				req.Header.Set("Content-Type", contentType)
 			}
 
-			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
-			req := httptest.NewRequest(http.MethodPost, "/books", &buf)
 			rec := httptest.NewRecorder()
-
 			h.CreateBook(rec, req)
 
 			if rec.Code != tt.wantStatus {

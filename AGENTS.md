@@ -90,6 +90,7 @@ Dockerfile               # Multi-stage production-образ
 | `B2_REGION` | — | Регион B2 (например `us-west-002`) |
 | `B2_ENDPOINT` | — | S3-совместимый endpoint B2 |
 | `B2_BUCKET` | — | Имя корзины B2 |
+| `FILE_BASE_URL` | `http://localhost:8080` | Базовый URL для ссылок на файлы книг (формируется как `{FILE_BASE_URL}/{s3_key}`) |
 
 ---
 
@@ -109,13 +110,11 @@ Dockerfile               # Multi-stage production-образ
 |---|---|---|---|
 | `POST` | `/register` | — | Регистрация пользователя |
 | `POST` | `/login` | — | Вход, возвращает JWT |
-| `POST` | `/books` | Bearer | Создать книгу |
-| `GET` | `/books` | — | Список всех книг |
-| `GET` | `/books/{id}` | — | Получить книгу по ID |
-| `PUT` | `/books/{id}` | — | Обновить книгу |
+| `POST` | `/books` | Bearer | Создать книгу + загрузить .txt-файл (multipart: title*, author*, year*, file*) |
+| `GET` | `/books` | — | Список всех книг (с file_url) |
+| `GET` | `/books/{id}` | — | Получить книгу по ID (с file_url) |
+| `PUT` | `/books/{id}` | — | Обновить метаданные книги |
 | `DELETE` | `/books/{id}` | — | Удалить книгу |
-| `POST` | `/api/files` | Bearer | Загрузить .txt-файл (multipart) |
-| `GET` | `/api/files/{id}` | — | Скачать файл по ID (stream из B2) |
 
 ### sqlc: когда перегенерировать
 - Изменился `schema.sql` (таблицы/колонки)
@@ -139,11 +138,15 @@ sqlc generate          # или: go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 - `s3.NewClient` — инициализация S3-клиента с `BaseEndpoint` и `UsePathStyle = true`
 
 Пакет `internal/service` реализует:
-- Генерацию `s3_key` на базе `google/uuid`
-- Координацию S3 + БД в `FileService.UploadFile` / `DownloadFile`
-- `File.ID` — `pgtype.UUID` (маппинг sqlc + pgx)
+- `FileService.UploadBookFile` — загрузка файла книги в S3, возвращает `(s3Key, fileURL)`
+- S3-ключ: `books/{uuid}/{original_name}`
+- `fileURL` = `{FILE_BASE_URL}/{s3_key}`
+- Координация S3 + БД в `main.go` (вызывается из `CreateBook` хендлера)
 
-Если B2 не настроен (переменные пусты), сервер запускается без файлового хранилища — ручки `/api/files` возвращают 503.
+БД: таблица `books` хранит `file_url`, `s3_key`, `file_name` напрямую.
+Таблица `files` удалена (миграция 000003).
+
+Если B2 не настроен (переменные пусты), сервер запускается без файлового хранилища — ручка `POST /books` возвращает 503.
 
 ### Миграции (golang-migrate v4)
 

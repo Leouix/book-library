@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
 	"book-library/internal/logger"
@@ -35,16 +36,16 @@ func NewHandler(store BookStore, userStore UserStore, jwtSecret []byte) *Handler
 	return &Handler{store: store, userStore: userStore, jwtSecret: jwtSecret}
 }
 
-// RegisterRoutes registers all routes on the given mux.
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /register", h.Register)
-	mux.HandleFunc("POST /login", h.Login)
+// RegisterRoutes registers all routes on the given chi router.
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Post("/register", h.Register)
+	r.Post("/login", h.Login)
 
-	mux.Handle("POST /books", h.AuthMiddleware(http.HandlerFunc(h.CreateBook)))
-	mux.HandleFunc("GET /books/{id}", h.GetBook)
-	mux.HandleFunc("GET /books", h.ListBooks)
-	mux.HandleFunc("PUT /books/{id}", h.UpdateBook)
-	mux.HandleFunc("DELETE /books/{id}", h.DeleteBook)
+	r.With(h.AuthMiddleware).Post("/books", h.CreateBook)
+	r.Get("/books", h.ListBooks)
+	r.Get("/books/{id}", h.GetBook)
+	r.Put("/books/{id}", h.UpdateBook)
+	r.Delete("/books/{id}", h.DeleteBook)
 }
 
 type createBookRequest struct {
@@ -169,7 +170,7 @@ func (h *Handler) DeleteBook(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseID(r *http.Request) (int32, error) {
-	idStr := r.PathValue("id")
+	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
 		return 0, err

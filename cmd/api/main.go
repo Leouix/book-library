@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -75,12 +77,14 @@ func main() {
 	queries := storage.New(pool)
 	handler := api.NewHandler(queries, queries, []byte(jwtSecret))
 
-	mux := http.NewServeMux()
-	handler.RegisterRoutes(mux)
+	r := chi.NewRouter()
+	r.Use(chimw.Logger)
+	r.Use(chimw.Recoverer)
+	handler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: r,
 	}
 
 	go func() {

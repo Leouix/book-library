@@ -288,14 +288,6 @@ Body (form-data):
   file: <file>    (поле "file", .txt, макс 10 MB)
 ```
 
-> ❗ Не указывай `Content-Type` руками — curl/Bruno проставят его с правильным boundary.
-> Правильный curl (без `--header 'content-type: ...'`):
-> ```bash
-> curl -X POST http://localhost:8080/api/files \
->   -H "Authorization: Bearer <token>" \
->   -F "file=@/home/leouix/book.txt"
-> ```
-
 **Ответ `201 Created`:**
 
 ```json

@@ -2,19 +2,41 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
 	"book-library/internal/api"
 	"book-library/internal/storage"
 )
+
+func runMigrations(databaseURL string) error {
+	// golang-migrate pgx5 driver expects pgx5:// scheme.
+	migrationURL := strings.Replace(databaseURL, "postgres://", "pgx5://", 1)
+
+	m, err := migrate.New("file://migrations", migrationURL)
+	if err != nil {
+		return fmt.Errorf("migrate init: %w", err)
+	}
+	defer m.Close()
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("migrate up: %w", err)
+	}
+
+	return nil
+}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
@@ -52,6 +74,10 @@ func main() {
 		log.Fatalf("failed to ping database: %v", err)
 	}
 	log.Println("connected to database")
+
+	if err := runMigrations(dsn); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
 
 	queries := storage.New(pool)
 	handler := api.NewHandler(queries, queries, []byte(jwtSecret))

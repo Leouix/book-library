@@ -10,3 +10,9 @@ type Book struct {
 	Author string
 	Year   int32
 }
+
+type User struct {
+	ID           int32
+	Username     string
+	PasswordHash string
+}

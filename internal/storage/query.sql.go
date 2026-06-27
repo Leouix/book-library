@@ -33,6 +33,24 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, e
 	return i, err
 }
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (username, password_hash)
+VALUES ($1, $2)
+RETURNING id, username, password_hash
+`
+
+type CreateUserParams struct {
+	Username     string
+	PasswordHash string
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser, arg.Username, arg.PasswordHash)
+	var i User
+	err := row.Scan(&i.ID, &i.Username, &i.PasswordHash)
+	return i, err
+}
+
 const deleteBook = `-- name: DeleteBook :exec
 DELETE FROM books
 WHERE id = $1
@@ -58,6 +76,19 @@ func (q *Queries) GetBook(ctx context.Context, id int32) (Book, error) {
 		&i.Author,
 		&i.Year,
 	)
+	return i, err
+}
+
+const getUserByUsername = `-- name: GetUserByUsername :one
+SELECT id, username, password_hash
+FROM users
+WHERE username = $1
+`
+
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByUsername, username)
+	var i User
+	err := row.Scan(&i.ID, &i.Username, &i.PasswordHash)
 	return i, err
 }
 

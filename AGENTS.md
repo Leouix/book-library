@@ -14,6 +14,7 @@
 | Сборка в контейнер | **Docker (multi-stage)** | Production-образ на `alpine:3.21` |
 | SQL-драйвер | **pgx/v5** | Типобезопасный драйвер PostgreSQL |
 | Генерация из SQL | **sqlc v1.31** | Генерация Go-кода из `schema.sql` + `query.sql` |
+| Миграции БД | **golang-migrate v4** | Версионирование схемы БД (автозапуск при старте)
 | Аутентификация | **golang-jwt/v5** | JWT-токены (HS256, 24h TTL) |
 | Хеширование паролей | **bcrypt** (`x/crypto`) | Хеширование и проверка паролей |
 | HTTP-роутинг | **net/http** (Go 1.22+) | Роутинг без сторонних библиотек |
@@ -30,13 +31,17 @@
 # 1. Поднять PostgreSQL
 docker compose up -d
 
-# 2. Сгенерировать код из SQL (если менялись schema.sql / query.sql)
+# 2. Применить миграции (опционально — сервер делает это автоматически при запуске)
+go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
+  -path migrations -database "pgx5://bookuser:bookpass@localhost:5432/bookdb?sslmode=disable" up
+
+# 3. Сгенерировать код из SQL (если менялись schema.sql / query.sql)
 sqlc generate
 
-# 3. Запустить сервер в режиме live-reload
+# 4. Запустить сервер в режиме live-reload
 air
 
-# 4. Либо запустить вручную
+# 5. Либо запустить вручную
 go run ./cmd/api
 ```
 
@@ -58,6 +63,7 @@ internal/
   logger/logger.go       # Глобальный slog.Logger
 schema.sql               # DDL (таблицы books, users)
 query.sql                # Аннотированные SQL-запросы для sqlc
+migrations/              # Миграции golang-migrate (000001_init.up.sql, .down.sql)
 sqlc.yaml                # Конфигурация sqlc
 docker-compose.yml       # PostgreSQL 16
 Dockerfile               # Multi-stage production-образ
@@ -111,3 +117,30 @@ sqlc generate          # или: go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
 ### Сгенерированные файлы (в .git)
 `internal/storage/db.go`, `models.go`, `query.sql.go` — несмотря на авто-генерацию, лежат в репозитории, чтобы проект компилировался без запуска sqlc.
+
+### Миграции (golang-migrate v4)
+
+Миграции находятся в `migrations/` и применяются автоматически при старте сервера в `cmd/api/main.go`.
+Драйвер: `pgx/v5` (использует `pgx5://`-схему URL).
+
+**Создание новой миграции:**
+
+```bash
+migrate create -ext sql -dir migrations -seq <описание_изменения>
+```
+
+После создания заполните файлы `up.sql` и `down.sql`.
+
+**Ручное применение миграций:**
+
+```bash
+# Накатить все неприменённые миграции
+go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
+  -path migrations -database "pgx5://bookuser:bookpass@localhost:5432/bookdb?sslmode=disable" up
+
+# Откатить последнюю миграцию
+go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
+  -path migrations -database "pgx5://bookuser:bookpass@localhost:5432/bookdb?sslmode=disable" down 1
+```
+
+**Важно:** после изменения схемы БД через миграцию необходимо обновить `schema.sql` (для sqlc-генерации типов) и перезапустить `sqlc generate`. Каждая новая миграция — это инкрементальное изменение; весь код миграций должен быть идемпотентным насколько возможно (используйте `IF EXISTS`, `IF NOT EXISTS`).

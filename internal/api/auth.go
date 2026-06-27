@@ -16,7 +16,7 @@ import (
 
 // UserStore is the interface for user storage operations.
 type UserStore interface {
-	CreateUser(ctx context.Context, username, passwordHash string) (storage.User, error)
+	CreateUser(ctx context.Context, arg storage.CreateUserParams) (storage.User, error)
 	GetUserByUsername(ctx context.Context, username string) (storage.User, error)
 }
 
@@ -105,7 +105,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.userStore.CreateUser(r.Context(), req.Username, string(hash))
+	user, err := h.userStore.CreateUser(r.Context(), storage.CreateUserParams{
+		Username:     req.Username,
+		PasswordHash: string(hash),
+	})
 	if err != nil {
 		log.Printf("CreateUser error: %v", err)
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "username already exists"})

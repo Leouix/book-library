@@ -7,12 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -22,10 +21,7 @@ import (
 )
 
 func runMigrations(databaseURL string) error {
-	// golang-migrate pgx5 driver expects pgx5:// scheme.
-	migrationURL := strings.Replace(databaseURL, "postgres://", "pgx5://", 1)
-
-	m, err := migrate.New("file://migrations", migrationURL)
+	m, err := migrate.New("file://migrations", databaseURL)
 	if err != nil {
 		return fmt.Errorf("migrate init: %w", err)
 	}

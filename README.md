@@ -288,6 +288,12 @@ Body (form-data):
   file: <file>    (поле "file", .txt, макс 10 MB)
 ```
 
+> ```bash
+> curl -X POST http://localhost:8080/api/files \
+>   -H "Authorization: Bearer <token>" \
+>   -F "file=@/home/leouix/book.txt"
+> ```
+
 **Ответ `201 Created`:**
 
 ```json

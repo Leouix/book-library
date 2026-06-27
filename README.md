@@ -99,7 +99,6 @@ curl -X POST http://localhost:8080/login \
 ### Создать книгу
 
 ```bash
-# Сохрани токен в переменную
 TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 curl -X POST http://localhost:8080/books \

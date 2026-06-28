@@ -33,8 +33,8 @@ http://localhost:8080/swagger/index.html#/
 | POST    | `/books`       | Создать книгу + загрузить файл (асинхронно)     | Bearer    |
 | GET     | `/books/{id}`  | Получить книгу (только completed)               | —         |
 | GET     | `/books`       | Список обработанных книг (только completed)      | —         |
-| PUT     | `/books/{id}`  | Обновить метаданные книги                       | —         |
-| DELETE  | `/books/{id}`  | Удалить книгу                                   | —         |
+| PUT     | `/books/{id}`  | Обновить метаданные книги                       | Bearer    |
+| DELETE  | `/books/{id}`  | Удалить книгу                                   | Bearer    |
 
 > 🔐 `POST /books` требует JWT-токен в заголовке `Authorization: Bearer <token>`. Остальные эндпоинты книг открыты.
 

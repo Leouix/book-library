@@ -87,6 +87,14 @@ type authResponse struct {
 // ---------- handlers ----------
 
 // Register handles POST /register.
+// @Summary      Register a new user
+// @Accept       json
+// @Produce      json
+// @Param        body  body  registerRequest  true  "Registration credentials"
+// @Success      201   {object}  authResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      409   {object}  map[string]string
+// @Router       /register [post]
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	var req registerRequest
@@ -121,6 +129,14 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 // Login handles POST /login.
+// @Summary      Login
+// @Accept       json
+// @Produce      json
+// @Param        body  body  loginRequest  true  "Login credentials"
+// @Success      200   {object}  authResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      401   {object}  map[string]string
+// @Router       /login [post]
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

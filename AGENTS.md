@@ -18,6 +18,7 @@
 | Аутентификация | **golang-jwt/v5** | JWT-токены (HS256, 24h TTL) |
 | Хеширование паролей | **bcrypt** (`x/crypto`) | Хеширование и проверка паролей |
 | HTTP-роутинг | **chi/v5** | Роутинг на основе chi |
+| Swagger | **swaggo/swag + http-swagger** | Автогенерация OpenAPI-спецификации + Swagger UI |
 | S3-клиент | **aws-sdk-go-v2** | Backblaze B2 через S3 API |
 | UUID | **google/uuid** | Генерация UUID для s3_key |
 | Логирование | **log/slog** | Структурированное логирование (stdout, уровень Debug) |
@@ -40,10 +41,13 @@ go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
 # 3. Сгенерировать код из SQL (если менялись schema.sql / query.sql)
 sqlc generate
 
-# 4. Запустить сервер в режиме live-reload
+# 4. Сгенерировать Swagger-спецификацию (если менялись аннотации)
+swag init -g cmd/api/main.go -o docs/
+
+# 5. Запустить сервер в режиме live-reload
 air
 
-# 5. Либо запустить вручную
+# 6. Либо запустить вручную
 go run ./cmd/api
 ```
 
@@ -68,6 +72,7 @@ internal/
     s3/
       s3.go              # S3-клиент, FileStorage интерфейс, S3Storage
   logger/logger.go       # Глобальный slog.Logger
+docs/                    # Сгенерированная swagger-спецификация
 query.sql                # Аннотированные SQL-запросы для sqlc
 migrations/              # Миграции golang-migrate
 sqlc.yaml                # Конфигурация sqlc
@@ -118,6 +123,17 @@ Dockerfile               # Multi-stage production-образ
 | `PUT` | `/books/{id}` | Bearer | Обновить метаданные книги |
 | `DELETE` | `/books/{id}` | Bearer | Удалить книгу |
 
+### Swagger UI
+
+URL: `http://localhost:8080/swagger/index.html`
+
+```bash
+# Генерация после изменения аннотаций
+swag init -g cmd/api/main.go -o docs/
+```
+
+> Файлы `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` лежат в репозитории, чтобы проект компилировался без `swag`.
+
 ### sqlc: когда перегенерировать
 - Изменился `schema.sql` (таблицы/колонки)
 - Изменился `query.sql` (запросы)
@@ -131,6 +147,7 @@ sqlc generate          # или: go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
 ### Сгенерированные файлы (в .git)
 `internal/storage/db.go`, `models.go`, `query.sql.go` — несмотря на авто-генерацию, лежат в репозитории, чтобы проект компилировался без запуска sqlc.
+`docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` — аналогично для swagger.
 
 ### File Storage (S3 / Backblaze B2)
 

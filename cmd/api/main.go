@@ -16,7 +16,9 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 
+	_ "book-library/docs"
 	"book-library/internal/api"
 	"book-library/internal/logger"
 	"book-library/internal/service"
@@ -123,6 +125,7 @@ func main() {
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	handler.RegisterRoutes(r)
+	r.Get("/swagger/*", httpSwagger.Handler())
 
 	srv := &http.Server{
 		Addr:    addr,

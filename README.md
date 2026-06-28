@@ -2,6 +2,11 @@
 
 Технические особенности проекта находятся в AGENTS.md
 
+### Swagger UI
+``` 
+http://localhost:8080/swagger/index.html#/
+```
+![Screenshot From 2026-06-28 22-27-31.png](docs/assets/Screenshot%20From%202026-06-28%2022-27-31.png)
 ## Эндпоинты
 
 ### Авторизация

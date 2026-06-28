@@ -50,6 +50,20 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.With(h.AuthMiddleware).Delete("/books/{id}", h.DeleteBook)
 }
 
+// CreateBook handles POST /books (auth required).
+// @Summary      Upload a book
+// @Accept       mpfd
+// @Produce      json
+// @Param        title   formData  string  true  "Book title"
+// @Param        author  formData  string  true  "Book author"
+// @Param        year    formData  int     true  "Publication year"
+// @Param        file    formData  file    true  "Book file (.txt)"
+// @Success      202     {object}  map[string]any
+// @Failure      400     {object}  map[string]string
+// @Failure      401     {object}  map[string]string
+// @Failure      413     {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /books [post]
 func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
 	if h.fileSvc == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "file storage not configured"})
@@ -137,6 +151,13 @@ func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetBook handles GET /books/{id}.
+// @Summary      Get a book by ID
+// @Produce      json
+// @Param        id   path  int  true  "Book ID"
+// @Success      200  {object}  storage.Book
+// @Failure      404  {object}  map[string]string
+// @Router       /books/{id} [get]
 func (h *Handler) GetBook(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
@@ -163,6 +184,11 @@ func (h *Handler) GetBook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, book)
 }
 
+// ListBooks handles GET /books.
+// @Summary      List all completed books
+// @Produce      json
+// @Success      200  {array}   storage.Book
+// @Router       /books [get]
 func (h *Handler) ListBooks(w http.ResponseWriter, r *http.Request) {
 	books, err := h.store.ListBooks(r.Context())
 	if err != nil {
@@ -177,6 +203,18 @@ func (h *Handler) ListBooks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, books)
 }
 
+// UpdateBook handles PUT /books/{id} (auth required).
+// @Summary      Update book metadata
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                  true  "Book ID"
+// @Param        body  body  storage.UpdateBookParams  true  "Updated fields"
+// @Success      200   {object}  storage.Book
+// @Failure      400   {object}  map[string]string
+// @Failure      401   {object}  map[string]string
+// @Failure      404   {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /books/{id} [put]
 func (h *Handler) UpdateBook(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
@@ -213,6 +251,14 @@ func (h *Handler) UpdateBook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, book)
 }
 
+// DeleteBook handles DELETE /books/{id} (auth required).
+// @Summary      Delete a book
+// @Param        id   path  int  true  "Book ID"
+// @Success      204  "No Content"
+// @Failure      401  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /books/{id} [delete]
 func (h *Handler) DeleteBook(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {

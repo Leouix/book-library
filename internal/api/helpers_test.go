@@ -18,17 +18,27 @@ import (
 	"book-library/internal/storage/s3"
 )
 
+type mockBookProcessor struct{}
+
+func (m *mockBookProcessor) CompleteBook(_ context.Context, _ storage.CompleteBookParams) error {
+	return nil
+}
+
+func (m *mockBookProcessor) FailBook(_ context.Context, _ int32) error {
+	return nil
+}
+
 type mockBookStore struct {
-	createBookFn func(context.Context, storage.CreateBookParams) (storage.Book, error)
+	createBookFn func(context.Context, storage.CreatePendingBookParams) (storage.Book, error)
 	getBookFn    func(context.Context, int32) (storage.Book, error)
 	listBooksFn  func(context.Context) ([]storage.Book, error)
 	updateBookFn func(context.Context, storage.UpdateBookParams) (storage.Book, error)
 	deleteBookFn func(context.Context, int32) error
 }
 
-func (m *mockBookStore) CreateBook(ctx context.Context, arg storage.CreateBookParams) (storage.Book, error) {
+func (m *mockBookStore) CreatePendingBook(ctx context.Context, arg storage.CreatePendingBookParams) (storage.Book, error) {
 	if m.createBookFn == nil {
-		panic("mockBookStore.CreateBook: function not set")
+		panic("mockBookStore.CreatePendingBook: function not set")
 	}
 	return m.createBookFn(ctx, arg)
 }
@@ -127,6 +137,10 @@ func fileSvcForTest() *service.FileService {
 			return nil
 		},
 	}, "http://test")
+}
+
+func workerPoolForTest() *service.WorkerPool {
+	return service.NewWorkerPool(0, &mockBookProcessor{}, fileSvcForTest())
 }
 
 func multipartBody(t testing.TB, fields map[string]string, filename, content string) (*bytes.Buffer, string) {

@@ -52,7 +52,7 @@ go run ./cmd/api
 ## Структура проекта (Standard Go Layout)
 
 ```
-cmd/api/main.go          # Точка входа, DI, graceful shutdown
+cmd/api/main.go          # Точка входа, DI, graceful shutdown + WorkerPool
 internal/
   api/
     handler.go           # CRUD-хэндлеры книг
@@ -60,6 +60,7 @@ internal/
     files.go             # Загрузка/скачивание файлов
   service/
     file.go              # Бизнес-логика файлов (S3 + БД)
+    worker.go            # WorkerPool — асинхронная загрузка файлов в S3
   storage/
     db.go                # DBTX-интерфейс, Queries (сгенерирован sqlc)
     models.go            # Go-структуры таблиц (сгенерирован sqlc)
@@ -100,6 +101,7 @@ Dockerfile               # Multi-stage production-образ
 Никаких глобальных переменных для БД. Подключение передаётся через структуры:
 - `pgxpool.Pool` → `storage.Queries` → `api.Handler`
 - `s3.Client` → `s3.S3Storage` → `service.FileService` → `api.Handler`
+- `storage.Queries` + `service.FileService` → `service.WorkerPool` → `api.Handler`
 
 ### Обработка ошибок
 Ошибки проверяются явно (`if err != nil`), клиенту возвращаются осмысленные HTTP-статусы (400, 401, 404, 409, 500). Паниковать нельзя.
@@ -110,9 +112,9 @@ Dockerfile               # Multi-stage production-образ
 |---|---|---|---|
 | `POST` | `/register` | — | Регистрация пользователя |
 | `POST` | `/login` | — | Вход, возвращает JWT |
-| `POST` | `/books` | Bearer | Создать книгу + загрузить .txt-файл (multipart: title*, author*, year*, file*) |
-| `GET` | `/books` | — | Список всех книг (с file_url) |
-| `GET` | `/books/{id}` | — | Получить книгу по ID (с file_url) |
+| `POST` | `/books` | Bearer | Создать книгу + загрузить .txt-файл (multipart: title*, author*, year*, file*). Возвращает 202, обработка асинхронная |
+| `GET` | `/books` | — | Список обработанных книг (только status=completed) |
+| `GET` | `/books/{id}` | — | Получить книгу по ID (только если status=completed) |
 | `PUT` | `/books/{id}` | Bearer | Обновить метаданные книги |
 | `DELETE` | `/books/{id}` | Bearer | Удалить книгу |
 
@@ -147,6 +149,21 @@ sqlc generate          # или: go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 Таблица `files` удалена (миграция 000003).
 
 Если B2 не настроен (переменные пусты), сервер запускается без файлового хранилища — ручка `POST /books` возвращает 503.
+
+### Async Worker Pool (загрузка файлов)
+
+Пакет `internal/service/worker.go` реализует асинхронную загрузку файлов:
+
+- `WorkerPool` — пул воркеров (3 goroutines), слушающих буферизированный канал `chan Job` (100 задач)
+- При `POST /books`: файл сохраняется в `/tmp`, книга создаётся со статусом `pending`, возвращается 202
+- Воркер подхватывает задачу: читает temp-файл → upload в S3 → обновляет статус на `completed` → удаляет temp-файл
+- При ошибке: статус `failed`, temp-файл удаляется
+- **Graceful shutdown**: последовательно HTTP → WorkerPool (30s timeout на дожидание текущих задач)
+- **Ретрей при старте**: все книги со статусом `pending`/`processing` помечаются как `failed` (temp-файлы потеряны при рестарте)
+
+**Статусы книги**: `pending` → `completed` | `failed`
+- `GET /books` — только `completed`
+- `GET /books/{id}` — только `completed`
 
 ### Миграции (golang-migrate v4)
 

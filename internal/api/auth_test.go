@@ -66,7 +66,7 @@ func TestRegister(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			h := NewHandler(&mockBookStore{}, tt.mock, nil, []byte("secret"))
+			h := NewHandler(&mockBookStore{}, tt.mock, nil, workerPoolForTest(), []byte("secret"))
 			req := httptest.NewRequest(http.MethodPost, "/register", &buf)
 			rec := httptest.NewRecorder()
 
@@ -148,7 +148,7 @@ func TestLogin(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			h := NewHandler(&mockBookStore{}, tt.mock, nil, []byte("secret"))
+			h := NewHandler(&mockBookStore{}, tt.mock, nil, workerPoolForTest(), []byte("secret"))
 			req := httptest.NewRequest(http.MethodPost, "/login", &buf)
 			rec := httptest.NewRecorder()
 
@@ -204,7 +204,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(&mockBookStore{}, &mockUserStore{}, nil, []byte("secret"))
+			h := NewHandler(&mockBookStore{}, &mockUserStore{}, nil, workerPoolForTest(), []byte("secret"))
 
 			var called bool
 			next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {

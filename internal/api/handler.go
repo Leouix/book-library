@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -18,7 +20,7 @@ import (
 const maxFileSize = 10 << 20 // 10 MB
 
 type BookStore interface {
-	CreateBook(ctx context.Context, arg storage.CreateBookParams) (storage.Book, error)
+	CreatePendingBook(ctx context.Context, arg storage.CreatePendingBookParams) (storage.Book, error)
 	GetBook(ctx context.Context, id int32) (storage.Book, error)
 	ListBooks(ctx context.Context) ([]storage.Book, error)
 	UpdateBook(ctx context.Context, arg storage.UpdateBookParams) (storage.Book, error)
@@ -26,14 +28,15 @@ type BookStore interface {
 }
 
 type Handler struct {
-	store     BookStore
-	userStore UserStore
-	fileSvc   *service.FileService
-	jwtSecret []byte
+	store      BookStore
+	userStore  UserStore
+	fileSvc    *service.FileService
+	workerPool *service.WorkerPool
+	jwtSecret  []byte
 }
 
-func NewHandler(store BookStore, userStore UserStore, fileSvc *service.FileService, jwtSecret []byte) *Handler {
-	return &Handler{store: store, userStore: userStore, fileSvc: fileSvc, jwtSecret: jwtSecret}
+func NewHandler(store BookStore, userStore UserStore, fileSvc *service.FileService, workerPool *service.WorkerPool, jwtSecret []byte) *Handler {
+	return &Handler{store: store, userStore: userStore, fileSvc: fileSvc, workerPool: workerPool, jwtSecret: jwtSecret}
 }
 
 func (h *Handler) RegisterRoutes(r chi.Router) {
@@ -92,28 +95,46 @@ func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
 		contentType = "text/plain"
 	}
 
-	s3Key, fileURL, err := h.fileSvc.UploadBookFile(r.Context(), header.Filename, file, contentType)
+	tmpFile, err := os.CreateTemp("", "book-*")
 	if err != nil {
-		logger.Error("create book: upload file", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to upload file"})
+		logger.Error("create book: create temp file", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save file"})
+		return
+	}
+	tmpPath := tmpFile.Name()
+
+	_, err = io.Copy(tmpFile, file)
+	tmpFile.Close()
+	if err != nil {
+		os.Remove(tmpPath)
+		logger.Error("create book: copy to temp file", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save file"})
 		return
 	}
 
-	book, err := h.store.CreateBook(r.Context(), storage.CreateBookParams{
-		Title:    title,
-		Author:   author,
-		Year:     int32(year),
-		FileUrl:  fileURL,
-		S3Key:    s3Key,
-		FileName: header.Filename,
+	book, err := h.store.CreatePendingBook(r.Context(), storage.CreatePendingBookParams{
+		Title:  title,
+		Author: author,
+		Year:   int32(year),
 	})
 	if err != nil {
+		os.Remove(tmpPath)
 		logger.Error("create book: db error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, book)
+	h.workerPool.Enqueue(service.Job{
+		BookID:   book.ID,
+		FilePath: tmpPath,
+		FileName: header.Filename,
+		MimeType: contentType,
+	})
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"id":     book.ID,
+		"status": "pending",
+	})
 }
 
 func (h *Handler) GetBook(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +151,11 @@ func (h *Handler) GetBook(w http.ResponseWriter, r *http.Request) {
 		} else {
 			logger.Error("get book: db error", err, "id", id)
 		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "book not found"})
+		return
+	}
+
+	if book.Status != "completed" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "book not found"})
 		return
 	}

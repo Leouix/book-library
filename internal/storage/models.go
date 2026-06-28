@@ -12,6 +12,7 @@ type Book struct {
 	FileUrl  string
 	S3Key    string
 	FileName string
+	Status   string
 }
 
 type User struct {

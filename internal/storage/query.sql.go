@@ -9,30 +9,43 @@ import (
 	"context"
 )
 
-const createBook = `-- name: CreateBook :one
-INSERT INTO books (title, author, year, file_url, s3_key, file_name)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, title, author, year, file_url, s3_key, file_name
+const completeBook = `-- name: CompleteBook :exec
+UPDATE books
+SET file_url = $2, s3_key = $3, file_name = $4, status = 'completed'
+WHERE id = $1
 `
 
-type CreateBookParams struct {
-	Title    string
-	Author   string
-	Year     int32
+type CompleteBookParams struct {
+	ID       int32
 	FileUrl  string
 	S3Key    string
 	FileName string
 }
 
-func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, error) {
-	row := q.db.QueryRow(ctx, createBook,
-		arg.Title,
-		arg.Author,
-		arg.Year,
+func (q *Queries) CompleteBook(ctx context.Context, arg CompleteBookParams) error {
+	_, err := q.db.Exec(ctx, completeBook,
+		arg.ID,
 		arg.FileUrl,
 		arg.S3Key,
 		arg.FileName,
 	)
+	return err
+}
+
+const createPendingBook = `-- name: CreatePendingBook :one
+INSERT INTO books (title, author, year, status)
+VALUES ($1, $2, $3, 'pending')
+RETURNING id, title, author, year, file_url, s3_key, file_name, status
+`
+
+type CreatePendingBookParams struct {
+	Title  string
+	Author string
+	Year   int32
+}
+
+func (q *Queries) CreatePendingBook(ctx context.Context, arg CreatePendingBookParams) (Book, error) {
+	row := q.db.QueryRow(ctx, createPendingBook, arg.Title, arg.Author, arg.Year)
 	var i Book
 	err := row.Scan(
 		&i.ID,
@@ -42,6 +55,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, e
 		&i.FileUrl,
 		&i.S3Key,
 		&i.FileName,
+		&i.Status,
 	)
 	return i, err
 }
@@ -65,8 +79,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const deleteBook = `-- name: DeleteBook :exec
-DELETE FROM books
-WHERE id = $1
+DELETE FROM books WHERE id = $1
 `
 
 func (q *Queries) DeleteBook(ctx context.Context, id int32) error {
@@ -74,8 +87,17 @@ func (q *Queries) DeleteBook(ctx context.Context, id int32) error {
 	return err
 }
 
+const failBook = `-- name: FailBook :exec
+UPDATE books SET status = 'failed' WHERE id = $1
+`
+
+func (q *Queries) FailBook(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, failBook, id)
+	return err
+}
+
 const getBook = `-- name: GetBook :one
-SELECT id, title, author, year, file_url, s3_key, file_name
+SELECT id, title, author, year, file_url, s3_key, file_name, status
 FROM books
 WHERE id = $1
 `
@@ -91,8 +113,44 @@ func (q *Queries) GetBook(ctx context.Context, id int32) (Book, error) {
 		&i.FileUrl,
 		&i.S3Key,
 		&i.FileName,
+		&i.Status,
 	)
 	return i, err
+}
+
+const getPendingBooks = `-- name: GetPendingBooks :many
+SELECT id, title, author, year, file_url, s3_key, file_name, status
+FROM books
+WHERE status = 'pending' OR status = 'processing'
+`
+
+func (q *Queries) GetPendingBooks(ctx context.Context) ([]Book, error) {
+	rows, err := q.db.Query(ctx, getPendingBooks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Book
+	for rows.Next() {
+		var i Book
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Author,
+			&i.Year,
+			&i.FileUrl,
+			&i.S3Key,
+			&i.FileName,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
@@ -109,8 +167,9 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listBooks = `-- name: ListBooks :many
-SELECT id, title, author, year, file_url, s3_key, file_name
+SELECT id, title, author, year, file_url, s3_key, file_name, status
 FROM books
+WHERE status = 'completed'
 ORDER BY id
 `
 
@@ -131,6 +190,7 @@ func (q *Queries) ListBooks(ctx context.Context) ([]Book, error) {
 			&i.FileUrl,
 			&i.S3Key,
 			&i.FileName,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -146,7 +206,7 @@ const updateBook = `-- name: UpdateBook :one
 UPDATE books
 SET title = $2, author = $3, year = $4
 WHERE id = $1
-RETURNING id, title, author, year, file_url, s3_key, file_name
+RETURNING id, title, author, year, file_url, s3_key, file_name, status
 `
 
 type UpdateBookParams struct {
@@ -172,6 +232,7 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) (Book, e
 		&i.FileUrl,
 		&i.S3Key,
 		&i.FileName,
+		&i.Status,
 	)
 	return i, err
 }

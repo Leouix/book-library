@@ -102,7 +102,22 @@ func main() {
 		logger.Warn("B2 credentials not set, file upload/download disabled")
 	}
 
-	handler := api.NewHandler(queries, queries, fileSvc, []byte(jwtSecret))
+	workerPool := service.NewWorkerPool(3, queries, fileSvc)
+
+	pendingBooks, err := queries.GetPendingBooks(ctx)
+	if err == nil {
+		for _, b := range pendingBooks {
+			logger.Warn("marking stale book as failed", "id", b.ID, "status", b.Status)
+			queries.FailBook(ctx, b.ID)
+		}
+	}
+	if len(pendingBooks) > 0 {
+		logger.Info("stale books marked as failed", "count", len(pendingBooks))
+	}
+
+	workerPool.Start()
+
+	handler := api.NewHandler(queries, queries, fileSvc, workerPool, []byte(jwtSecret))
 
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)
@@ -132,6 +147,13 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Fatal("server forced to shutdown", err)
+	}
+
+	workerCtx, workerCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer workerCancel()
+
+	if err := workerPool.Shutdown(workerCtx); err != nil {
+		logger.Warn("worker pool shutdown timed out")
 	}
 
 	logger.Info("server stopped")

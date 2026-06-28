@@ -46,7 +46,7 @@ func TestListBooks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, workerPoolForTest(), []byte("secret"))
 			req := httptest.NewRequest(http.MethodGet, "/books", nil)
 			rec := httptest.NewRecorder()
 
@@ -72,7 +72,7 @@ func TestListBooks_dbError(t *testing.T) {
 		listBooksFn: func(_ context.Context) ([]storage.Book, error) {
 			return nil, pgx.ErrNoRows
 		},
-	}, &mockUserStore{}, nil, []byte("secret"))
+	}, &mockUserStore{}, nil, workerPoolForTest(), []byte("secret"))
 	req := httptest.NewRequest(http.MethodGet, "/books", nil)
 	rec := httptest.NewRecorder()
 
@@ -104,11 +104,11 @@ func TestGetBook(t *testing.T) {
 			id:   "1",
 			mock: &mockBookStore{
 				getBookFn: func(_ context.Context, id int32) (storage.Book, error) {
-					return storage.Book{ID: id, Title: "T", Author: "A", Year: 2024}, nil
+					return storage.Book{ID: id, Title: "T", Author: "A", Year: 2024, Status: "completed"}, nil
 				},
 			},
 			wantStatus: http.StatusOK,
-			wantBook:   &storage.Book{ID: 1, Title: "T", Author: "A", Year: 2024},
+			wantBook:   &storage.Book{ID: 1, Title: "T", Author: "A", Year: 2024, Status: "completed"},
 		},
 		{
 			name: "not found",
@@ -130,7 +130,7 @@ func TestGetBook(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, workerPoolForTest(), []byte("secret"))
 			req := chiCtx(httptest.NewRequest(http.MethodGet, "/books/"+tt.id, nil), "id", tt.id)
 			rec := httptest.NewRecorder()
 
@@ -168,18 +168,18 @@ func TestCreateBook(t *testing.T) {
 			filename: "book.txt",
 			content:  "hello world",
 			mock: &mockBookStore{
-				createBookFn: func(_ context.Context, arg storage.CreateBookParams) (storage.Book, error) {
-					return storage.Book{ID: 1, Title: arg.Title, Author: arg.Author, Year: arg.Year, FileUrl: arg.FileUrl, S3Key: arg.S3Key, FileName: arg.FileName}, nil
+				createBookFn: func(_ context.Context, arg storage.CreatePendingBookParams) (storage.Book, error) {
+					return storage.Book{ID: 1, Title: arg.Title, Author: arg.Author, Year: arg.Year, Status: "pending"}, nil
 				},
 			},
-			wantStatus: http.StatusCreated,
+			wantStatus: http.StatusAccepted,
 		},
 		{
 			name:     "missing fields",
 			fields:   map[string]string{"title": ""},
 			filename: "book.txt",
 			content:  "hello",
-			mock: &mockBookStore{createBookFn: func(_ context.Context, _ storage.CreateBookParams) (storage.Book, error) {
+			mock: &mockBookStore{createBookFn: func(_ context.Context, _ storage.CreatePendingBookParams) (storage.Book, error) {
 				panic("should not be called")
 			}},
 			wantStatus: http.StatusBadRequest,
@@ -189,7 +189,7 @@ func TestCreateBook(t *testing.T) {
 			fields:   map[string]string{"title": "T", "author": "A", "year": "2024"},
 			filename: "",
 			content:  "",
-			mock: &mockBookStore{createBookFn: func(_ context.Context, _ storage.CreateBookParams) (storage.Book, error) {
+			mock: &mockBookStore{createBookFn: func(_ context.Context, _ storage.CreatePendingBookParams) (storage.Book, error) {
 				panic("should not be called")
 			}},
 			wantStatus: http.StatusBadRequest,
@@ -208,7 +208,7 @@ func TestCreateBook(t *testing.T) {
 			filename: "book.txt",
 			content:  "hello",
 			mock: &mockBookStore{
-				createBookFn: func(_ context.Context, _ storage.CreateBookParams) (storage.Book, error) {
+				createBookFn: func(_ context.Context, _ storage.CreatePendingBookParams) (storage.Book, error) {
 					return storage.Book{}, pgx.ErrNoRows
 				},
 			},
@@ -218,7 +218,7 @@ func TestCreateBook(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mock, &mockUserStore{}, fileSvcForTest(), []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, fileSvcForTest(), workerPoolForTest(), []byte("secret"))
 
 			var req *http.Request
 			if tt.filename == "" && tt.content == "" {
@@ -295,7 +295,7 @@ func TestUpdateBook(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, workerPoolForTest(), []byte("secret"))
 			req := chiCtx(httptest.NewRequest(http.MethodPut, "/books/"+tt.id, &buf), "id", tt.id)
 			rec := httptest.NewRecorder()
 
@@ -347,7 +347,7 @@ func TestDeleteBook(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mock, &mockUserStore{}, nil, []byte("secret"))
+			h := NewHandler(tt.mock, &mockUserStore{}, nil, workerPoolForTest(), []byte("secret"))
 			req := chiCtx(httptest.NewRequest(http.MethodDelete, "/books/"+tt.id, nil), "id", tt.id)
 			rec := httptest.NewRecorder()
 

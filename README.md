@@ -1,14 +1,14 @@
 # Book Library API
 
-### Ключевые особенности проекта
-- роутинг, middleware
-- Авторизация
-- Система Миграций
-- sqlc для генерации моделей
-- Асинхронность задач
-- PostgresSQL
-- Облачное хранилище файлов
-- Технические особенности проекта находятся в AGENTS.md
+### Key Features
+- routing, middleware
+- Authorization
+- Migration System
+- sqlc for model generation
+- Async tasks
+- PostgreSQL
+- Cloud file storage
+- Technical details are in AGENTS.md
 
 ### Swagger UI
 ``` 
@@ -17,32 +17,32 @@ http://localhost:8080/swagger/index.html#/
 ![Screenshot From 2026-06-28 22-27-31.png](docs/assets/Screenshot%20From%202026-06-28%2022-27-31.png)
 
 
-## Эндпоинты
+## Endpoints
 
-### Авторизация
+### Authorization
 
-| Метод | Путь         | Описание              | Защита    |
-|-------|-------------|-----------------------|-----------|
-| POST  | `/register` | Зарегистрироваться    | —         |
-| POST  | `/login`    | Войти, получить JWT   | —         |
+| Method | Path         | Description          | Auth    |
+|--------|--------------|----------------------|---------|
+| POST   | `/register`  | Register             | —       |
+| POST   | `/login`     | Login, get JWT       | —       |
 
-### Книги
+### Books
 
-| Метод   | Путь           | Описание                                       | Защита    |
-|---------|----------------|------------------------------------------------|-----------|
-| POST    | `/books`       | Создать книгу + загрузить файл (асинхронно)     | Bearer    |
-| GET     | `/books/{id}`  | Получить книгу (только completed)               | —         |
-| GET     | `/books`       | Список обработанных книг (только completed)      | —         |
-| PUT     | `/books/{id}`  | Обновить метаданные книги                       | —         |
-| DELETE  | `/books/{id}`  | Удалить книгу                                   | —         |
+| Method | Path            | Description                                    | Auth    |
+|--------|-----------------|------------------------------------------------|---------|
+| POST   | `/books`        | Create book + upload file (async)              | Bearer  |
+| GET    | `/books/{id}`   | Get book (completed only)                      | —       |
+| GET    | `/books`        | List processed books (completed only)          | —       |
+| PUT    | `/books/{id}`   | Update book metadata                           | —       |
+| DELETE | `/books/{id}`   | Delete book                                    | —       |
 
-> 🔐 `POST /books` требует JWT-токен в заголовке `Authorization: Bearer <token>`. Остальные эндпоинты книг открыты.
+> 🔐 `POST /books` requires a JWT token in the `Authorization: Bearer <token>` header. Other book endpoints are open.
 
 ---
 
-## Авторизация
+## Authorization
 
-### Регистрация
+### Register
 
 ```bash
 curl -X POST http://localhost:8080/register \
@@ -50,14 +50,14 @@ curl -X POST http://localhost:8080/register \
   -d '{"username": "alice", "password": "secret123"}'
 ```
 
-**Тело запроса:**
+**Request body:**
 
-| Поле     | Тип    | Обязательное | Описание     |
-|----------|--------|-------------|--------------|
-| username | string | да          | Логин        |
-| password | string | да          | Пароль       |
+| Field    | Type   | Required | Description |
+|----------|--------|----------|-------------|
+| username | string | yes      | Login       |
+| password | string | yes      | Password    |
 
-**Ответ `201 Created`:**
+**Response `201 Created`:**
 
 ```json
 {
@@ -65,16 +65,16 @@ curl -X POST http://localhost:8080/register \
 }
 ```
 
-**Ошибки:**
+**Errors:**
 
-| Статус | Когда                           |
-|--------|----------------------------------|
-| 400    | Невалидный JSON или пустые поля  |
-| 409    | Пользователь уже существует      |
+| Status | When                           |
+|--------|--------------------------------|
+| 400    | Invalid JSON or empty fields   |
+| 409    | User already exists            |
 
 ---
 
-### Вход (получение JWT)
+### Login (get JWT)
 
 ```bash
 curl -X POST http://localhost:8080/login \
@@ -82,14 +82,14 @@ curl -X POST http://localhost:8080/login \
   -d '{"username": "alice", "password": "secret123"}'
 ```
 
-**Тело запроса:**
+**Request body:**
 
-| Поле     | Тип    | Обязательное | Описание     |
-|----------|--------|-------------|--------------|
-| username | string | да          | Логин        |
-| password | string | да          | Пароль       |
+| Field    | Type   | Required | Description |
+|----------|--------|----------|-------------|
+| username | string | yes      | Login       |
+| password | string | yes      | Password    |
 
-**Ответ `200 OK`:**
+**Response `200 OK`:**
 
 ```json
 {
@@ -98,48 +98,48 @@ curl -X POST http://localhost:8080/login \
 }
 ```
 
-**Ошибки:**
+**Errors:**
 
-| Статус | Когда                              |
-|--------|-------------------------------------|
-| 400    | Невалидный JSON или пустые поля     |
-| 401    | Неверный логин или пароль           |
+| Status | When                              |
+|--------|-----------------------------------|
+| 400    | Invalid JSON or empty fields      |
+| 401    | Invalid username or password      |
 
-> 💡 Токен живёт **24 часа**. Сохрани значение поля `token` — оно понадобится для защищённых эндпоинтов.
+> 💡 Token lives **24 hours**. Save the `token` value — you'll need it for protected endpoints.
 
 ---
 
-## Книги
+## Books
 
-### Создать книгу
+### Create a book
 
 ```bash
 TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 curl -X POST http://localhost:8080/books \
   -H "Authorization: Bearer $TOKEN" \
-  -F "title=Война и мир" \
-  -F "author=Лев Толстой" \
+  -F "title=War and Peace" \
+  -F "author=Leo Tolstoy" \
   -F "year=1869" \
   -F "file=@book.txt"
 ```
 
-**Заголовки:**
+**Headers:**
 
-| Заголовок      | Значение              | Обязательный |
-|----------------|-----------------------|-------------|
-| Authorization  | `Bearer <JWT-токен>`  | да          |
+| Header        | Value                | Required |
+|---------------|----------------------|----------|
+| Authorization | `Bearer <JWT-token>` | yes      |
 
-**Поля формы (multipart/form-data):**
+**Form fields (multipart/form-data):**
 
-| Поле    | Тип     | Обязательное | Описание                 |
-|---------|---------|-------------|--------------------------|
-| title   | string  | да          | Название книги           |
-| author  | string  | да          | Автор                    |
-| year    | string  | да          | Год издания              |
-| file    | file    | да          | Файл (.txt, макс 10 MB)  |
+| Field  | Type   | Required | Description                |
+|--------|--------|----------|----------------------------|
+| title  | string | yes      | Book title                 |
+| author | string | yes      | Author                     |
+| year   | string | yes      | Year of publication        |
+| file   | file   | yes      | File (.txt, max 10 MB)     |
 
-**Ответ `202 Accepted`:**
+**Response `202 Accepted`:**
 
 ```json
 {
@@ -148,38 +148,38 @@ curl -X POST http://localhost:8080/books \
 }
 ```
 
-Книга будет обработана асинхронно воркером. Когда обработка завершится, `status` изменится на `completed` и книга появится в `GET /books`.
+The book will be processed asynchronously by a worker. When processing completes, `status` changes to `completed` and the book appears in `GET /books`.
 
-**Ошибки:**
+**Errors:**
 
-| Статус | Когда                               |
-|--------|--------------------------------------|
-| 400    | Отсутствуют обязательные поля или файл |
-| 401    | Отсутствует или невалидный токен     |
-| 413    | Файл больше 10 MB                    |
-| 503    | Файловое хранилище не настроено      |
+| Status | When                                  |
+|--------|---------------------------------------|
+| 400    | Missing required fields or file       |
+| 401    | Missing or invalid token              |
+| 413    | File exceeds 10 MB                    |
+| 503    | File storage not configured           |
 
 ---
 
-### Получить книгу по ID
+### Get a book by ID
 
 ```bash
 curl http://localhost:8080/books/1
 ```
 
-**Параметры пути:**
+**Path parameters:**
 
-| Параметр | Тип   | Описание  |
-|----------|-------|-----------|
-| id       | int   | ID книги  |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id        | int  | Book ID     |
 
-**Ответ `200 OK`:**
+**Response `200 OK`:**
 
 ```json
 {
   "id": 1,
-  "title": "Война и мир",
-  "author": "Лев Толстой",
+  "title": "War and Peace",
+  "author": "Leo Tolstoy",
   "year": 1869,
   "file_url": "http://localhost:8080/books/550e8400-e29b-41d4-a716-446655440000/book.txt",
   "s3_key": "books/550e8400-e29b-41d4-a716-446655440000/book.txt",
@@ -188,33 +188,33 @@ curl http://localhost:8080/books/1
 }
 ```
 
-Возвращается только для книг со статусом `completed`. Если книга ещё обрабатывается (`pending`) или обработка не удалась (`failed`) — `404`.
+Only returned for books with `completed` status. If the book is still processing (`pending`) or processing failed (`failed`) — `404`.
 
-**Ошибки:**
+**Errors:**
 
-| Статус | Когда          |
-|--------|----------------|
-| 400    | Невалидный id  |
-| 404    | Книга не найдена или не обработана |
+| Status | When                             |
+|--------|----------------------------------|
+| 400    | Invalid id                       |
+| 404    | Book not found or not processed  |
 
 ---
 
-### Список обработанных книг
+### List processed books
 
 ```bash
 curl http://localhost:8080/books
 ```
 
-Возвращает только книги со статусом `completed`. Книги, которые ещё обрабатываются (`pending`) или не удались (`failed`), не отображаются.
+Returns only books with `completed` status. Books that are still processing (`pending`) or failed (`failed`) are not shown.
 
-**Ответ `200 OK`:**
+**Response `200 OK`:**
 
 ```json
 [
   {
     "id": 1,
-    "title": "Война и мир",
-    "author": "Лев Толстой",
+    "title": "War and Peace",
+    "author": "Leo Tolstoy",
     "year": 1869,
     "file_url": "http://localhost:8080/books/550e8400-e29b-41d4-a716-446655440000/book.txt",
     "s3_key": "books/550e8400-e29b-41d4-a716-446655440000/book.txt",
@@ -224,39 +224,39 @@ curl http://localhost:8080/books
 ]
 ```
 
-Если обработанных книг нет — возвращается пустой массив `[]`.
+If no processed books exist — an empty array `[]` is returned.
 
 ---
 
-### Обновить книгу
+### Update a book
 
 ```bash
 curl -X PUT http://localhost:8080/books/1 \
   -H "Content-Type: application/json" \
-  -d '{"title": "Война и мир", "author": "Лев Толстой", "year": 1873}'
+  -d '{"title": "War and Peace", "author": "Leo Tolstoy", "year": 1873}'
 ```
 
-**Параметры пути:**
+**Path parameters:**
 
-| Параметр | Тип   | Описание  |
-|----------|-------|-----------|
-| id       | int   | ID книги  |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id        | int  | Book ID     |
 
-**Тело запроса:**
+**Request body:**
 
-| Поле    | Тип     | Обязательное | Описание          |
-|---------|---------|-------------|-------------------|
-| title   | string  | да          | Новое название    |
-| author  | string  | да          | Новый автор       |
-| year    | int     | да          | Новый год         |
+| Field  | Type   | Required | Description     |
+|--------|--------|----------|-----------------|
+| title  | string | yes      | New title       |
+| author | string | yes      | New author      |
+| year   | int    | yes      | New year        |
 
-**Ответ `200 OK`:**
+**Response `200 OK`:**
 
 ```json
 {
   "id": 1,
-  "title": "Война и мир",
-  "author": "Лев Толстой",
+  "title": "War and Peace",
+  "author": "Leo Tolstoy",
   "year": 1873,
   "file_url": "http://localhost:8080/books/550e8400-e29b-41d4-a716-446655440000/book.txt",
   "s3_key": "books/550e8400-e29b-41d4-a716-446655440000/book.txt",
@@ -264,32 +264,32 @@ curl -X PUT http://localhost:8080/books/1 \
 }
 ```
 
-**Ошибки:**
+**Errors:**
 
-| Статус | Когда                    |
-|--------|--------------------------|
-| 400    | Невалидный id или JSON   |
-| 404    | Книга не найдена         |
+| Status | When                   |
+|--------|------------------------|
+| 400    | Invalid id or JSON     |
+| 404    | Book not found          |
 
 ---
 
-### Удалить книгу
+### Delete a book
 
 ```bash
 curl -X DELETE http://localhost:8080/books/1
 ```
 
-**Параметры пути:**
+**Path parameters:**
 
-| Параметр | Тип   | Описание  |
-|----------|-------|-----------|
-| id       | int   | ID книги  |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id        | int  | Book ID     |
 
-**Ответ:** `204 No Content` (тело пустое)
+**Response:** `204 No Content` (empty body)
 
-**Ошибки:**
+**Errors:**
 
-| Статус | Когда            |
-|--------|------------------|
-| 400    | Невалидный id    |
-| 404    | Книга не найдена |
+| Status | When           |
+|--------|----------------|
+| 400    | Invalid id     |
+| 404    | Book not found |

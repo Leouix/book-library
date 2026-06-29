@@ -1,218 +1,218 @@
 # AGENTS.md — Book Library
 
-> Файл-инструкция для AI-агентов. Описывает стек, команды и архитектурные соглашения проекта.
+> Instruction file for AI agents. Describes the stack, commands, and architectural conventions of the project.
 
 ---
 
-## Стек технологий
+## Tech Stack
 
-| Слой | Технология | Назначение |
+| Layer | Technology | Purpose |
 |---|---|---|
-| Язык | **Go 1.26** | Основной язык разработки |
-| База данных | **PostgreSQL 16** | Хранение книг и пользователей |
-| Контейнеризация БД | **Docker Compose** | Поднятие PostgreSQL в контейнере |
-| Сборка в контейнер | **Docker (multi-stage)** | Production-образ на `alpine:3.21` |
-| SQL-драйвер | **pgx/v5** | Типобезопасный драйвер PostgreSQL |
-| Генерация из SQL | **sqlc v1.31** | Генерация Go-кода из `schema.sql` + `query.sql` |
-| Миграции БД | **golang-migrate v4** | Версионирование схемы БД (автозапуск при старте)
-| Аутентификация | **golang-jwt/v5** | JWT-токены (HS256, 24h TTL) |
-| Хеширование паролей | **bcrypt** (`x/crypto`) | Хеширование и проверка паролей |
-| HTTP-роутинг | **chi/v5** | Роутинг на основе chi |
-| Swagger | **swaggo/swag + http-swagger** | Автогенерация OpenAPI-спецификации + Swagger UI |
-| S3-клиент | **aws-sdk-go-v2** | Backblaze B2 через S3 API |
-| UUID | **google/uuid** | Генерация UUID для s3_key |
-| Логирование | **log/slog** | Структурированное логирование (stdout, уровень Debug) |
-| Live-reload | **air** | Автопересборка при изменениях (`.air.toml`) |
-| Конфигурация | **godotenv** | Загрузка переменных из `.env`-файла |
-| Линтинг | **golangci-lint** | Статический анализ кода |
+| Language | **Go 1.26** | Main development language |
+| Database | **PostgreSQL 16** | Store books and users |
+| DB containerization | **Docker Compose** | Run PostgreSQL in a container |
+| Container build | **Docker (multi-stage)** | Production image on `alpine:3.21` |
+| SQL driver | **pgx/v5** | Type-safe PostgreSQL driver |
+| SQL code generation | **sqlc v1.31** | Generate Go code from `schema.sql` + `query.sql` |
+| DB migrations | **golang-migrate v4** | Version DB schema (auto-run on startup) |
+| Authentication | **golang-jwt/v5** | JWT tokens (HS256, 24h TTL) |
+| Password hashing | **bcrypt** (`x/crypto`) | Hash and verify passwords |
+| HTTP routing | **chi/v5** | chi-based routing |
+| Swagger | **swaggo/swag + http-swagger** | Auto-generate OpenAPI spec + Swagger UI |
+| S3 client | **aws-sdk-go-v2** | Backblaze B2 via S3 API |
+| UUID | **google/uuid** | Generate UUID for s3_key |
+| Logging | **log/slog** | Structured logging (stdout, Debug level) |
+| Live-reload | **air** | Auto-rebuild on changes (`.air.toml`) |
+| Configuration | **godotenv** | Load variables from `.env` file |
+| Linting | **golangci-lint** | Static code analysis |
 
 ---
 
-## Быстрый старт
+## Quick Start
 
 ```bash
-# 1. Поднять PostgreSQL
+# 1. Start PostgreSQL
 docker compose up -d
 
-# 2. Применить миграции (опционально — сервер делает это автоматически при запуске)
+# 2. Apply migrations (optional — server does this automatically on startup)
 go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
   -path migrations -database "postgres://bookuser:bookpass@localhost:5432/bookdb?sslmode=disable" up
 
-# 3. Сгенерировать код из SQL (если менялись schema.sql / query.sql)
+# 3. Generate code from SQL (if schema.sql / query.sql changed)
 sqlc generate
 
-# 4. Сгенерировать Swagger-спецификацию (если менялись аннотации)
+# 4. Generate Swagger spec (if annotations changed)
 swag init -g cmd/api/main.go -o docs/
 
-# 5. Запустить сервер в режиме live-reload
+# 5. Run server in live-reload mode
 air
 
-# 6. Либо запустить вручную
+# 6. Or run manually
 go run ./cmd/api
 ```
 
 ---
 
-## Структура проекта (Standard Go Layout)
+## Project Structure (Standard Go Layout)
 
 ```
-cmd/api/main.go          # Точка входа, DI, graceful shutdown + WorkerPool
+cmd/api/main.go          # Entry point, DI, graceful shutdown + WorkerPool
 internal/
   api/
-    handler.go           # CRUD-хэндлеры книг
-    auth.go              # Регистрация, логин, JWT middleware
-    files.go             # Загрузка/скачивание файлов
+    handler.go           # CRUD handlers for books
+    auth.go              # Registration, login, JWT middleware
+    files.go             # File upload/download
   service/
-    file.go              # Бизнес-логика файлов (S3 + БД)
-    worker.go            # WorkerPool — асинхронная загрузка файлов в S3
+    file.go              # File business logic (S3 + DB)
+    worker.go            # WorkerPool — async file upload to S3
   storage/
-    db.go                # DBTX-интерфейс, Queries (сгенерирован sqlc)
-    models.go            # Go-структуры таблиц (сгенерирован sqlc)
-    query.sql.go         # Методы запросов к книгам/файлам (сгенерирован sqlc)
+    db.go                # DBTX interface, Queries (sqlc generated)
+    models.go            # Go table structs (sqlc generated)
+    query.sql.go         # Query methods for books/files (sqlc generated)
     s3/
-      s3.go              # S3-клиент, FileStorage интерфейс, S3Storage
-  logger/logger.go       # Глобальный slog.Logger
-docs/                    # Сгенерированная swagger-спецификация
-query.sql                # Аннотированные SQL-запросы для sqlc
-migrations/              # Миграции golang-migrate
-sqlc.yaml                # Конфигурация sqlc
+      s3.go              # S3 client, FileStorage interface, S3Storage
+  logger/logger.go       # Global slog.Logger
+docs/                    # Generated swagger spec
+query.sql                # Annotated SQL queries for sqlc
+migrations/              # golang-migrate migrations
+sqlc.yaml                # sqlc configuration
 docker-compose.yml       # PostgreSQL 16
-Dockerfile               # Multi-stage production-образ
-.air.toml                # Конфигурация live-reload
-.env                     # Переменные окружения (не коммитится!)
+Dockerfile               # Multi-stage production image
+.air.toml                # Live-reload configuration
+.env                     # Environment variables (not committed!)
 ```
 
 ---
 
-## Переменные окружения
+## Environment Variables
 
-| Переменная | По умолчанию | Назначение |
+| Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `postgres://bookuser:bookpass@localhost:5432/bookdb` | Строка подключения к БД |
-| `ADDR` | `:8080` | Адрес HTTP-сервера |
-| `JWT_SECRET` | `changeme` | Секрет для подписи JWT |
+| `DATABASE_URL` | `postgres://bookuser:bookpass@localhost:5432/bookdb` | DB connection string |
+| `ADDR` | `:8080` | HTTP server address |
+| `JWT_SECRET` | `changeme` | Secret for JWT signing |
 | `B2_KEY_ID` | — | Backblaze B2 Application Key ID |
 | `B2_APPLICATION_KEY` | — | Backblaze B2 Application Key |
-| `B2_REGION` | — | Регион B2 (например `us-west-002`) |
-| `B2_ENDPOINT` | — | S3-совместимый endpoint B2 |
-| `B2_BUCKET` | — | Имя корзины B2 |
-| `FILE_BASE_URL` | `http://localhost:8080` | Базовый URL для ссылок на файлы книг (формируется как `{FILE_BASE_URL}/{s3_key}`) |
+| `B2_REGION` | — | B2 region (e.g. `us-west-002`) |
+| `B2_ENDPOINT` | — | S3-compatible B2 endpoint |
+| `B2_BUCKET` | — | B2 bucket name |
+| `FILE_BASE_URL` | `http://localhost:8080` | Base URL for book file links (formed as `{FILE_BASE_URL}/{s3_key}`) |
 
 ---
 
-## Архитектурные соглашения
+## Architectural Conventions
 
 ### Dependency Injection
-Никаких глобальных переменных для БД. Подключение передаётся через структуры:
+No global variables for DB. Connections are passed through structs:
 - `pgxpool.Pool` → `storage.Queries` → `api.Handler`
 - `s3.Client` → `s3.S3Storage` → `service.FileService` → `api.Handler`
 - `storage.Queries` + `service.FileService` → `service.WorkerPool` → `api.Handler`
 
-### Обработка ошибок
-Ошибки проверяются явно (`if err != nil`), клиенту возвращаются осмысленные HTTP-статусы (400, 401, 404, 409, 500). Паниковать нельзя.
+### Error Handling
+Errors are checked explicitly (`if err != nil`), meaningful HTTP statuses are returned to the client (400, 401, 404, 409, 500). No panicking.
 
-### API-роуты
+### API Routes
 
-| Метод | Путь | Auth | Описание |
+| Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/register` | — | Регистрация пользователя |
-| `POST` | `/login` | — | Вход, возвращает JWT |
-| `POST` | `/books` | Bearer | Создать книгу + загрузить .txt-файл (multipart: title*, author*, year*, file*). Возвращает 202, обработка асинхронная |
-| `GET` | `/books` | — | Список обработанных книг (только status=completed) |
-| `GET` | `/books/{id}` | — | Получить книгу по ID (только если status=completed) |
-| `PUT` | `/books/{id}` | Bearer | Обновить метаданные книги |
-| `DELETE` | `/books/{id}` | Bearer | Удалить книгу |
+| `POST` | `/register` | — | Register a user |
+| `POST` | `/login` | — | Login, returns JWT |
+| `POST` | `/books` | Bearer | Create book + upload .txt file (multipart: title*, author*, year*, file*). Returns 202, async processing |
+| `GET` | `/books` | — | List processed books (status=completed only) |
+| `GET` | `/books/{id}` | — | Get book by ID (only if status=completed) |
+| `PUT` | `/books/{id}` | Bearer | Update book metadata |
+| `DELETE` | `/books/{id}` | Bearer | Delete book |
 
 ### Swagger UI
 
 URL: `http://localhost:8080/swagger/index.html`
 
 ```bash
-# Генерация после изменения аннотаций
+# Generate after changing annotations
 swag init -g cmd/api/main.go -o docs/
 ```
 
-> Файлы `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` лежат в репозитории, чтобы проект компилировался без `swag`.
+> Files `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` are in the repository so the project compiles without `swag`.
 
-### sqlc: когда перегенерировать
-- Изменился `schema.sql` (таблицы/колонки)
-- Изменился `query.sql` (запросы)
-- Изменился `sqlc.yaml`
+### sqlc: when to regenerate
+- `schema.sql` changed (tables/columns)
+- `query.sql` changed (queries)
+- `sqlc.yaml` changed
 
 ```bash
-sqlc generate          # или: go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
+sqlc generate          # or: go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
 ```
 
-> Файлы `db.go`, `models.go`, `query.sql.go` генерируются автоматически. Не редактировать вручную.
+> Files `db.go`, `models.go`, `query.sql.go` are auto-generated. Do not edit manually.
 
-### Сгенерированные файлы (в .git)
-`internal/storage/db.go`, `models.go`, `query.sql.go` — несмотря на авто-генерацию, лежат в репозитории, чтобы проект компилировался без запуска sqlc.
-`docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` — аналогично для swagger.
+### Generated files (in .git)
+`internal/storage/db.go`, `models.go`, `query.sql.go` — despite being auto-generated, they live in the repository so the project compiles without running sqlc.
+`docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` — same for swagger.
 
 ### File Storage (S3 / Backblaze B2)
 
-Пакет `internal/storage/s3` предоставляет:
-- `s3.FileStorage` — интерфейс с методами `Upload` / `Download`
-- `s3.S3Storage` — имплементация через aws-sdk-go-v2 (`PutObject` / `GetObject`)
-- `s3.NewClient` — инициализация S3-клиента с `BaseEndpoint` и `UsePathStyle = true`
+Package `internal/storage/s3` provides:
+- `s3.FileStorage` — interface with `Upload` / `Download` methods
+- `s3.S3Storage` — implementation via aws-sdk-go-v2 (`PutObject` / `GetObject`)
+- `s3.NewClient` — initialize S3 client with `BaseEndpoint` and `UsePathStyle = true`
 
-Пакет `internal/service` реализует:
-- `FileService.UploadBookFile` — загрузка файла книги в S3, возвращает `(s3Key, fileURL)`
-- S3-ключ: `books/{uuid}/{original_name}`
+Package `internal/service` implements:
+- `FileService.UploadBookFile` — upload book file to S3, returns `(s3Key, fileURL)`
+- S3 key: `books/{uuid}/{original_name}`
 - `fileURL` = `{FILE_BASE_URL}/{s3_key}`
-- Координация S3 + БД в `main.go` (вызывается из `CreateBook` хендлера)
+- S3 + DB coordination in `main.go` (called from `CreateBook` handler)
 
-БД: таблица `books` хранит `file_url`, `s3_key`, `file_name` напрямую.
-Таблица `files` удалена (миграция 000003).
+DB: the `books` table stores `file_url`, `s3_key`, `file_name` directly.
+The `files` table was removed (migration 000003).
 
-Если B2 не настроен (переменные пусты), сервер запускается без файлового хранилища — ручка `POST /books` возвращает 503.
+If B2 is not configured (variables are empty), the server starts without file storage — `POST /books` returns 503.
 
-### Async Worker Pool (загрузка файлов)
+### Async Worker Pool (file upload)
 
-Пакет `internal/service/worker.go` реализует асинхронную загрузку файлов:
+Package `internal/service/worker.go` implements async file upload:
 
-- `WorkerPool` — пул воркеров (3 goroutines), слушающих буферизированный канал `chan Job` (100 задач)
-- При `POST /books`: файл сохраняется в `/tmp`, книга создаётся со статусом `pending`, возвращается 202
-- Воркер подхватывает задачу: читает temp-файл → upload в S3 → обновляет статус на `completed` → удаляет temp-файл
-- При ошибке: статус `failed`, temp-файл удаляется
-- **Graceful shutdown**: последовательно HTTP → WorkerPool (30s timeout на дожидание текущих задач)
-- **Ретрей при старте**: все книги со статусом `pending`/`processing` помечаются как `failed` (temp-файлы потеряны при рестарте)
+- `WorkerPool` — pool of workers (3 goroutines), listening on a buffered channel `chan Job` (100 tasks)
+- On `POST /books`: file is saved to `/tmp`, book is created with `pending` status, returns 202
+- Worker picks up the task: reads temp file → upload to S3 → updates status to `completed` → deletes temp file
+- On error: status set to `failed`, temp file is deleted
+- **Graceful shutdown**: HTTP → WorkerPool sequentially (30s timeout to finish current tasks)
+- **Retry on startup**: all books with `pending`/`processing` status are marked as `failed` (temp files lost on restart)
 
-**Статусы книги**: `pending` → `completed` | `failed`
-- `GET /books` — только `completed`
-- `GET /books/{id}` — только `completed`
+**Book statuses**: `pending` → `completed` | `failed`
+- `GET /books` — only `completed`
+- `GET /books/{id}` — only `completed`
 
-### Миграции (golang-migrate v4)
+### Migrations (golang-migrate v4)
 
-Миграции находятся в `migrations/` и применяются автоматически при старте сервера в `cmd/api/main.go`.
-Драйвер: `database/postgres` (использует `postgres://`-схему URL, единую с `pgxpool`).
+Migrations are in `migrations/` and are applied automatically on server startup in `cmd/api/main.go`.
+Driver: `database/postgres` (uses `postgres://` URL scheme, shared with `pgxpool`).
 
-**Создание новой миграции:**
+**Creating a new migration:**
 
 ```bash
-migrate create -ext sql -dir migrations -seq <описание_изменения>
+migrate create -ext sql -dir migrations -seq <change_description>
 ```
 
-После создания заполните файлы `up.sql` и `down.sql`.
+After creation, fill in the `up.sql` and `down.sql` files.
 
-**Ручное применение миграций:**
+**Applying migrations manually:**
 
 ```bash
-# Накатить все неприменённые миграции
+# Apply all pending migrations
 go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
   -path migrations -database "postgres://bookuser:bookpass@localhost:5432/bookdb?sslmode=disable" up
 
-# Откатить последнюю миграцию
+# Roll back the last migration
 go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
   -path migrations -database "postgres://bookuser:bookpass@localhost:5432/bookdb?sslmode=disable" down 1
 ```
 
-**Важно:** 
+**Important:** 
 
-После изменения схемы БД через миграцию необходимо перезапустить `sqlc generate` (схема читается из `migrations/`). Каждая новая миграция — это инкрементальное изменение; весь код миграций должен быть идемпотентным насколько возможно (используйте `IF EXISTS`, `IF NOT EXISTS`).
+After changing the DB schema via migration, you must re-run `sqlc generate` (the schema is read from `migrations/`). Each new migration is an incremental change; all migration code should be as idempotent as possible (use `IF EXISTS`, `IF NOT EXISTS`).
 
-Никогда не редактируй файл .env, веди .env.example.
+Never edit the .env file, maintain .env.example instead.
 
-Роуты сохраняй актуальными в файле README.md.
+Keep routes up to date in README.md.
 
-Дописывай важные изменения в AGENTS.md.
+Write important changes into AGENTS.md.
